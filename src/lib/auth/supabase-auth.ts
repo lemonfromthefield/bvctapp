@@ -2,6 +2,14 @@ import { supabaseClient } from '../supabase/client';
 import { UserSession } from '@/types';
 import { ROLE_PERMISSIONS, UserRole } from '@/types/roles';
 
+async function getProfileByUserId(userId: string) {
+  return supabaseClient
+    .from('profiles')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle();
+}
+
 /**
  * Get current user session from Supabase Auth
  */
@@ -14,12 +22,16 @@ export async function getCurrentUser(): Promise<UserSession | null> {
     return null;
   }
 
-  // Fetch profile data from database
-  const { data: profile } = await supabaseClient
-    .from('profiles')
-    .select('*')
-    .eq('user_id', user.id)
-    .single();
+  // Fetch profile data from database.
+  // After sign-in there can be a brief race where token/session propagation lags,
+  // so we retry once after forcing a session read.
+  let { data: profile } = await getProfileByUserId(user.id);
+
+  if (!profile) {
+    await supabaseClient.auth.getSession();
+    const retryResult = await getProfileByUserId(user.id);
+    profile = retryResult.data;
+  }
 
   if (!profile) {
     return null;
