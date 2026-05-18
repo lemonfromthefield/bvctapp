@@ -10,6 +10,39 @@ async function getProfileByUserId(userId: string) {
     .maybeSingle();
 }
 
+function getRoleFromMetadata(roleValue: unknown): UserRole {
+  if (typeof roleValue === 'string' && Object.values(UserRole).includes(roleValue as UserRole)) {
+    return roleValue as UserRole;
+  }
+
+  return UserRole.REPRESENTANTE_AREA;
+}
+
+function buildFallbackSession(user: {
+  id: string;
+  email?: string | null;
+  user_metadata?: Record<string, unknown> | null;
+}): UserSession {
+  const metadata = user.user_metadata ?? {};
+  const role = getRoleFromMetadata(metadata.role);
+  const fullName =
+    typeof metadata.full_name === 'string' && metadata.full_name.trim().length > 0
+      ? metadata.full_name
+      : user.email?.split('@')[0] || 'Usuario';
+  const areaId = typeof metadata.area_id === 'string' && metadata.area_id.trim().length > 0 ? metadata.area_id : undefined;
+
+  return {
+    id: user.id,
+    user_id: user.id,
+    email: user.email || '',
+    full_name: fullName,
+    role,
+    area_id: areaId,
+    permissions: ROLE_PERMISSIONS[role].map((permission) => permission.toString()),
+    is_active: typeof metadata.is_active === 'boolean' ? metadata.is_active : true,
+  };
+}
+
 /**
  * Get current user session from Supabase Auth
  */
@@ -25,16 +58,17 @@ export async function getCurrentUser(): Promise<UserSession | null> {
   // Fetch profile data from database.
   // After sign-in there can be a brief race where token/session propagation lags,
   // so we retry once after forcing a session read.
-  let { data: profile } = await getProfileByUserId(user.id);
+  let { data: profile, error: profileError } = await getProfileByUserId(user.id);
 
-  if (!profile) {
+  if (!profile && !profileError) {
     await supabaseClient.auth.getSession();
     const retryResult = await getProfileByUserId(user.id);
     profile = retryResult.data;
+    profileError = retryResult.error;
   }
 
   if (!profile) {
-    return null;
+    return buildFallbackSession(user);
   }
 
   const role = profile.role as UserRole;
