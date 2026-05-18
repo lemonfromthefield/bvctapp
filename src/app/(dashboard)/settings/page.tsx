@@ -8,11 +8,20 @@ import { getCurrentUser } from '@/lib/auth/supabase-auth';
 import { ROLES_INFO, UserRole } from '@/types/roles';
 import type { Profile } from '@/types/users';
 
+type Area = {
+  id: string;
+  name: string;
+  code: string;
+};
+
 export default function SettingsPage() {
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [areas, setAreas] = useState<Area[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [selectedRoleById, setSelectedRoleById] = useState<Record<string, UserRole>>({});
+  const [selectedAreaById, setSelectedAreaById] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   const canManageUsers = useMemo(
@@ -40,15 +49,24 @@ export default function SettingsPage() {
         return;
       }
 
-      const { data, error: profilesError } = await supabaseClient
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const [profilesResult, areasResult] = await Promise.all([
+        supabaseClient.from('profiles').select('*').order('created_at', { ascending: false }),
+        supabaseClient.from('areas').select('id, name, code').order('name', { ascending: true }),
+      ]);
+
+      const { data, error: profilesError } = profilesResult;
+      const { data: areasData, error: areasError } = areasResult;
 
       if (profilesError) {
         setError(profilesError.message);
       } else {
         setProfiles((data ?? []) as Profile[]);
+      }
+
+      if (areasError) {
+        setError(areasError.message);
+      } else {
+        setAreas((areasData ?? []) as Area[]);
       }
 
       setLoading(false);
@@ -57,21 +75,38 @@ export default function SettingsPage() {
     loadSettings();
   }, []);
 
-  const updateUserStatus = async (userId: string, isActive: boolean) => {
-    setSavingId(userId);
+  const updateUserStatus = async (profile: Profile, isActive: boolean) => {
+    setSavingId(profile.id);
     setError(null);
+
+    const roleToSave = selectedRoleById[profile.id] ?? profile.role;
+    const areaToSave =
+      roleToSave === UserRole.REPRESENTANTE_AREA
+        ? selectedAreaById[profile.id] ?? profile.area_id ?? null
+        : null;
 
     const { error: updateError } = await supabaseClient
       .from('profiles')
-      .update({ is_active: isActive })
-      .eq('id', userId);
+      .update({
+        is_active: isActive,
+        role: roleToSave,
+        area_id: areaToSave,
+      })
+      .eq('id', profile.id);
 
     if (updateError) {
       setError(updateError.message);
     } else {
       setProfiles((current) =>
-        current.map((profile) =>
-          profile.id === userId ? { ...profile, is_active: isActive } : profile
+        current.map((currentProfile) =>
+          currentProfile.id === profile.id
+            ? {
+                ...currentProfile,
+                is_active: isActive,
+                role: roleToSave,
+                area_id: areaToSave ?? undefined,
+              }
+            : currentProfile
         )
       );
     }
@@ -125,15 +160,59 @@ export default function SettingsPage() {
                     <p className="font-semibold text-gray-900">{profile.full_name}</p>
                     <p className="text-sm text-gray-600">{profile.email}</p>
                     <p className="text-xs text-gray-500">
-                      Rol: {ROLES_INFO[profile.role].displayName} · Estado:{' '}
-                      {profile.is_active ? 'Activo' : 'Pendiente'}
+                      Estado: {profile.is_active ? 'Activo' : 'Pendiente'}
                     </p>
+
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      <label className="space-y-1 text-xs text-gray-500">
+                        <span className="block font-medium text-gray-700">Rol</span>
+                        <select
+                          value={selectedRoleById[profile.id] ?? profile.role}
+                          onChange={(e) =>
+                            setSelectedRoleById((current) => ({
+                              ...current,
+                              [profile.id]: e.target.value as UserRole,
+                            }))
+                          }
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        >
+                          {Object.values(UserRole).map((userRole) => (
+                            <option key={userRole} value={userRole}>
+                              {ROLES_INFO[userRole].displayName}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="space-y-1 text-xs text-gray-500">
+                        <span className="block font-medium text-gray-700">Área</span>
+                        <select
+                          value={selectedAreaById[profile.id] ?? profile.area_id ?? ''}
+                          onChange={(e) =>
+                            setSelectedAreaById((current) => ({
+                              ...current,
+                              [profile.id]: e.target.value,
+                            }))
+                          }
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        >
+                          <option value="">Sin área</option>
+                          {areas.map((area) => {
+                            return (
+                              <option key={area.id} value={area.id}>
+                                {area.name}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </label>
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant={profile.is_active ? 'outline' : 'default'}
-                      onClick={() => updateUserStatus(profile.id, !profile.is_active)}
+                      onClick={() => updateUserStatus(profile, !profile.is_active)}
                       isLoading={savingId === profile.id}
                     >
                       {profile.is_active ? 'Desactivar' : 'Aprobar'}

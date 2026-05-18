@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { getCurrentUser, signInWithEmail, signOut, signUpWithEmail } from '@/lib/auth/supabase-auth';
-import { ROLES_INFO, UserRole } from '@/types/roles';
+import { UserRole } from '@/types/roles';
 
 type Mode = 'login' | 'register';
 
@@ -31,15 +31,9 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState<UserRole>(UserRole.REPRESENTANTE_AREA);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const roleOptions = useMemo(
-    () => [UserRole.REPRESENTANTE_AREA, UserRole.JEFATURA, UserRole.COMISION_DIRECTIVA],
-    []
-  );
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -77,11 +71,11 @@ export default function LoginPage() {
     setMessage(null);
 
     try {
-      const result = await signUpWithEmail(email, password, fullName, role);
+      const result = await signUpWithEmail(email, password, fullName);
 
       if (result.session || result.user?.confirmed_at) {
         const currentUser = await getCurrentUser();
-        router.push(getRoleDestination(currentUser?.role ?? role));
+        router.push(getRoleDestination(currentUser?.role ?? UserRole.REPRESENTANTE_AREA));
         return;
       }
 
@@ -144,23 +138,9 @@ export default function LoginPage() {
                   placeholder="Nombre y apellido"
                   required
                 />
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-900">Rol</label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as UserRole)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-500"
-                  >
-                    {roleOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {ROLES_INFO[option].displayName}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-1 text-xs text-gray-500">
-                    El flujo de aprobación por Comisión todavía no está automatizado; por ahora el rol se asigna al crear el usuario.
-                  </p>
-                </div>
+                <p className="text-xs text-gray-500">
+                  Comisión Directiva definirá el rol y el área cuando revise tu solicitud.
+                </p>
               </>
             ) : null}
 
