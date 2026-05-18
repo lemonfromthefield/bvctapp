@@ -7,6 +7,7 @@ import {
   Wallet,
   Settings,
 } from 'lucide-react';
+import { PendingUsersNotification } from '@/components/dashboard/pending-users-notification';
 
 interface NavItem {
   icon: ReactNode;
@@ -52,7 +53,7 @@ export default function DashboardLayout({
       <div className="flex-1 flex flex-col">
         <div className="h-16 bg-white border-b border-gray-200 px-8 flex items-center justify-between">
           <h1 className="text-xl font-semibold text-gray-900">BVCT - Sistema de Tickets</h1>
-          <span className="text-sm text-gray-600">Panel institucional</span>
+          <PendingUsersNotification />
         </div>
 
         <div className="flex-1 overflow-auto">

@@ -81,23 +81,6 @@ export async function signUpWithEmail(
     throw signUpError;
   }
 
-  if (data.user) {
-    // Create profile record
-    const { error: profileError } = await supabaseClient
-      .from('profiles')
-      .insert({
-        user_id: data.user.id,
-        email,
-        full_name: fullName,
-        role,
-        area_id: areaId || null,
-      });
-
-    if (profileError) {
-      throw profileError;
-    }
-  }
-
   return data;
 }
 

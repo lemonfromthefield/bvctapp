@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   role user_role_enum NOT NULL DEFAULT 'REPRESENTANTE_AREA',
   area_id UUID REFERENCES areas(id) ON DELETE SET NULL,
   avatar_url TEXT,
-  is_active BOOLEAN DEFAULT true,
+  is_active BOOLEAN DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
@@ -389,6 +389,22 @@ CREATE POLICY "profiles_read_hierarchy" ON profiles FOR SELECT
 CREATE POLICY "profiles_update_own" ON profiles FOR UPDATE
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "profiles_update_manage" ON profiles FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE user_id = auth.uid()
+      AND role IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN')
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE user_id = auth.uid()
+      AND role IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN')
+    )
+  );
 
 -- Tickets: Complex visibility rules
 CREATE POLICY "tickets_read_own_or_visible" ON tickets FOR SELECT

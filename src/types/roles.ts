@@ -108,6 +108,7 @@ export const ROLE_PERMISSIONS: RolePermissionMap = {
     Permission.VIEW_HISTORY,
     Permission.VIEW_AUDIT_LOG,
     Permission.VIEW_SETTINGS,
+    Permission.MANAGE_USERS,
   ],
 
   [UserRole.ADMIN]: [
