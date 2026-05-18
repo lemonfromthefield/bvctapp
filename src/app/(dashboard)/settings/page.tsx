@@ -115,14 +115,14 @@ export default function SettingsPage() {
   };
 
   if (loading) {
-    return <p className="text-gray-600">Cargando configuración...</p>;
+    return <p className="text-slate-600">Cargando configuración...</p>;
   }
 
   if (!canManageUsers) {
     return (
-      <div className="space-y-3">
-        <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
-        <p className="text-gray-600">
+      <div className="space-y-3 rounded-3xl border border-white/70 bg-[var(--surface)] p-6 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
+        <h1 className="text-2xl font-bold text-[#1f120f]">Configuración</h1>
+        <p className="text-slate-600">
           Este módulo queda reservado para Comisión Directiva y Administradores.
         </p>
       </div>
@@ -132,12 +132,12 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
-        <p className="text-gray-600">Aprobación de usuarios y control básico de acceso.</p>
+        <h1 className="text-2xl font-bold text-[#1f120f]">Configuración</h1>
+        <p className="text-slate-600">Aprobación de usuarios y control básico de acceso.</p>
       </div>
 
       {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       ) : null}
@@ -148,24 +148,24 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {profiles.length === 0 ? (
-            <p className="text-gray-600">Todavía no hay usuarios registrados.</p>
+            <p className="text-slate-600">Todavía no hay usuarios registrados.</p>
           ) : (
             <div className="space-y-3">
               {profiles.map((profile) => (
                 <div
                   key={profile.id}
-                  className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 md:flex-row md:items-center md:justify-between"
+                  className="flex flex-col gap-3 rounded-3xl border border-white/70 bg-[var(--surface)] p-4 md:flex-row md:items-center md:justify-between"
                 >
                   <div>
-                    <p className="font-semibold text-gray-900">{profile.full_name}</p>
-                    <p className="text-sm text-gray-600">{profile.email}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="font-semibold text-[#1f120f]">{profile.full_name}</p>
+                    <p className="text-sm text-slate-600">{profile.email}</p>
+                    <p className="text-xs text-slate-500">
                       Estado: {profile.is_active ? 'Activo' : 'Pendiente'}
                     </p>
 
                     <div className="mt-2 grid gap-2 md:grid-cols-2">
-                      <label className="space-y-1 text-xs text-gray-500">
-                        <span className="block font-medium text-gray-700">Rol</span>
+                      <label className="space-y-1 text-xs text-slate-500">
+                        <span className="block font-medium text-slate-700">Rol</span>
                         <select
                           value={selectedRoleById[profile.id] ?? profile.role}
                           onChange={(e) =>
@@ -174,7 +174,7 @@ export default function SettingsPage() {
                               [profile.id]: e.target.value as UserRole,
                             }))
                           }
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                          className="w-full rounded-xl border border-[#d9c2b7] bg-white/90 px-3 py-2 text-sm shadow-sm outline-none"
                         >
                           {Object.values(UserRole).map((userRole) => (
                             <option key={userRole} value={userRole}>
@@ -184,8 +184,8 @@ export default function SettingsPage() {
                         </select>
                       </label>
 
-                      <label className="space-y-1 text-xs text-gray-500">
-                        <span className="block font-medium text-gray-700">Área</span>
+                      <label className="space-y-1 text-xs text-slate-500">
+                        <span className="block font-medium text-slate-700">Área</span>
                         <select
                           value={selectedAreaById[profile.id] ?? profile.area_id ?? ''}
                           onChange={(e) =>
@@ -194,7 +194,7 @@ export default function SettingsPage() {
                               [profile.id]: e.target.value,
                             }))
                           }
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                          className="w-full rounded-xl border border-[#d9c2b7] bg-white/90 px-3 py-2 text-sm shadow-sm outline-none"
                         >
                           <option value="">Sin área</option>
                           {areas.map((area) => {

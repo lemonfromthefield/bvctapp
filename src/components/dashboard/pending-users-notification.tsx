@@ -49,17 +49,17 @@ export function PendingUsersNotification() {
   }, []);
 
   if (!canReview) {
-    return <span className="text-sm text-gray-600">Panel institucional</span>;
+    return <span className="rounded-full border border-[#ead8cf] bg-white/70 px-3 py-1 text-sm text-[#5f362d] shadow-sm">Panel institucional</span>;
   }
 
   if (pendingCount <= 0) {
-    return <span className="text-sm text-gray-600">Sin solicitudes pendientes</span>;
+    return <span className="rounded-full border border-[#ead8cf] bg-white/70 px-3 py-1 text-sm text-[#5f362d] shadow-sm">Sin solicitudes pendientes</span>;
   }
 
   return (
     <Link
       href="/settings"
-      className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700 hover:bg-amber-100"
+      className="inline-flex items-center gap-2 rounded-full border border-[#ef9f62]/40 bg-gradient-to-r from-[#fff5ec] to-[#fde7d8] px-4 py-2 text-sm font-semibold text-[#9a3d12] shadow-sm transition hover:shadow-md"
     >
       <Bell className="h-4 w-4" />
       {pendingCount} solicitud{pendingCount === 1 ? '' : 'es'} pendiente{pendingCount === 1 ? '' : 's'}
