@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { supabaseClient } from '@/lib/supabase/client';
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
 import { createTicketSchema } from '@/lib/validators/schemas';
-import { TicketPriority } from '@/types/tickets';
+import { PRIORITY_RULES, TicketPriority } from '@/types/tickets';
 
 type Area = {
   id: string;
@@ -24,10 +24,12 @@ export default function NewTicketPage() {
   const [areaId, setAreaId] = useState('');
   const [observations, setObservations] = useState('');
   const [suggestedPriority, setSuggestedPriority] = useState<TicketPriority>(TicketPriority.SIN_PRIORIDAD);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [loadingAreas, setLoadingAreas] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -75,10 +77,28 @@ export default function NewTicketPage() {
     []
   );
 
+  const expectedCoverageInDays = PRIORITY_RULES[suggestedPriority].expectedCoverageInDays;
+
+  const expectedDeadlineLabel = useMemo(() => {
+    const deadline = new Date();
+    deadline.setDate(deadline.getDate() + expectedCoverageInDays);
+    return deadline.toLocaleDateString('es-AR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+  }, [expectedCoverageInDays]);
+
+  const handleFileSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    setSelectedFiles(files);
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
+    setWarning(null);
 
     try {
       const currentUser = await getCurrentUser();
@@ -103,18 +123,67 @@ export default function NewTicketPage() {
         return;
       }
 
-      const { error: insertError } = await supabaseClient.from('tickets').insert({
-        user_id: currentUser.id,
-        area_id: validation.data.area_id,
-        concept: validation.data.concept,
-        quantity: validation.data.quantity,
-        observations: validation.data.observations ?? null,
-        suggested_priority: validation.data.suggested_priority ?? TicketPriority.SIN_PRIORIDAD,
-      });
+      const { data: createdTicket, error: insertError } = await supabaseClient
+        .from('tickets')
+        .insert({
+          user_id: currentUser.id,
+          area_id: validation.data.area_id,
+          concept: validation.data.concept,
+          quantity: validation.data.quantity,
+          observations: validation.data.observations ?? null,
+          suggested_priority: validation.data.suggested_priority ?? TicketPriority.SIN_PRIORIDAD,
+        })
+        .select('id, ticket_number')
+        .single();
 
       if (insertError) {
         setError(insertError.message);
         return;
+      }
+
+      if (!createdTicket) {
+        setError('No se pudo recuperar el ticket creado.');
+        return;
+      }
+
+      if (selectedFiles.length > 0) {
+        const uploadWarnings: string[] = [];
+
+        for (const file of selectedFiles) {
+          const sanitizedFileName = file.name.replace(/\s+/g, '_');
+          const filePath = `${currentUser.id}/${createdTicket.id}/${Date.now()}-${sanitizedFileName}`;
+
+          const { error: storageError } = await supabaseClient.storage
+            .from('ticket-attachments')
+            .upload(filePath, file, { upsert: false });
+
+          if (storageError) {
+            uploadWarnings.push(`No se pudo subir ${file.name}`);
+            continue;
+          }
+
+          const { error: attachmentError } = await supabaseClient
+            .from('attachments')
+            .insert({
+              ticket_id: createdTicket.id,
+              file_name: file.name,
+              file_path: filePath,
+              file_size: file.size,
+              mime_type: file.type || null,
+              uploaded_by: currentUser.id,
+            });
+
+          if (attachmentError) {
+            uploadWarnings.push(`Se subio ${file.name} pero no se registro en la base`);
+          }
+        }
+
+        if (uploadWarnings.length > 0) {
+          setWarning(
+            `Ticket #${createdTicket.ticket_number} creado. Algunos adjuntos no se pudieron registrar: ${uploadWarnings.join(', ')}.`
+          );
+          return;
+        }
       }
 
       router.push('/tickets');
@@ -192,6 +261,27 @@ export default function NewTicketPage() {
               </select>
             </label>
 
+            <div className="rounded-2xl border border-[#f3d7c6] bg-[#fff6ef] px-4 py-3 text-sm text-[#6b4b42]">
+              <p className="font-semibold text-[#5f362d]">Tiempo estimado de relevamiento</p>
+              <p className="mt-1">
+                Para esta prioridad, el plazo objetivo es de {expectedCoverageInDays} dia{expectedCoverageInDays === 1 ? '' : 's'}.
+              </p>
+              <p className="mt-1 text-xs text-[#7d5a4f]">Fecha limite estimada: {expectedDeadlineLabel}</p>
+            </div>
+
+            <Input
+              label="Adjuntar archivos (opcional)"
+              type="file"
+              onChange={handleFileSelection}
+              multiple
+            />
+
+            {selectedFiles.length > 0 ? (
+              <p className="text-xs text-slate-600">
+                {selectedFiles.length} archivo{selectedFiles.length === 1 ? '' : 's'} seleccionado{selectedFiles.length === 1 ? '' : 's'}.
+              </p>
+            ) : null}
+
             <label className="space-y-1 text-sm text-slate-600">
               <span className="block font-medium text-slate-700">Observaciones</span>
               <textarea
@@ -206,6 +296,12 @@ export default function NewTicketPage() {
             {error ? (
               <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
+              </div>
+            ) : null}
+
+            {warning ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {warning}
               </div>
             ) : null}
 

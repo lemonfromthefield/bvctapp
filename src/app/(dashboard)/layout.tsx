@@ -7,6 +7,7 @@ import {
 import { PendingUsersNotification } from '@/components/dashboard/pending-users-notification';
 import { SessionInactivityGuard } from '@/components/auth/session-inactivity-guard';
 import { DashboardSidebarNav } from '@/components/layout/dashboard-sidebar-nav';
+import { UserInfoBar } from '@/components/layout/user-info-bar';
 
 const FIRE_STATION_NAME = 'Bomberos Voluntarios Colonia Tirolesa';
 const FIRE_STATION_LOGO_URL = 'https://bomberosvoluntarioscoloniatirolesa.org/Images/Logo%20png.png';
@@ -55,6 +56,7 @@ export default function DashboardLayout({
             <p className="text-xs text-[#6b4b42]">Tickets, prioridades, presupuestos y usuarios.</p>
           </div>
           <div className="flex items-center gap-2">
+            <PendingUsersNotification />
             <Link
               href="/help"
               className="inline-flex items-center gap-2 rounded-full border border-[#ef9f62]/40 bg-gradient-to-r from-[#fff5ec] to-[#fde7d8] px-4 py-2 text-sm font-semibold text-[#9a3d12] shadow-sm transition hover:shadow-md"
@@ -62,7 +64,7 @@ export default function DashboardLayout({
               <CircleHelp className="h-4 w-4" />
               Ayuda
             </Link>
-            <PendingUsersNotification />
+            <UserInfoBar />
           </div>
         </div>
 

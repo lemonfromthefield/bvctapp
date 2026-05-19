@@ -469,6 +469,15 @@ CREATE POLICY "ticket_history_read" ON ticket_history FOR SELECT
     )
   );
 
+CREATE POLICY "ticket_history_insert" ON ticket_history FOR INSERT
+  WITH CHECK (
+    user_id = auth.uid() AND
+    EXISTS (
+      SELECT 1 FROM tickets
+      WHERE tickets.id = ticket_history.ticket_id
+    )
+  );
+
 -- Ticket Comments: Same visibility as tickets
 CREATE POLICY "ticket_comments_read" ON ticket_comments FOR SELECT
   USING (
