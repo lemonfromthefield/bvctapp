@@ -187,7 +187,6 @@ export default function TicketDetailPage() {
       } else {
         const rawTicket = ticketResult.data as Omit<TicketDetail, 'areas' | 'profiles'> & {
           areas: MaybeArray<{ name: string; code: string }>;
-          profiles: MaybeArray<{ full_name: string; role: string }>;
         };
 
         // Get profile from separate query result
