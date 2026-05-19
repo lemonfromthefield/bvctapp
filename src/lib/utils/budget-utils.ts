@@ -2,13 +2,15 @@ import { supabaseClient } from '@/lib/supabase/client';
 
 export type BudgetTotals = {
   totalIncome: number;
-  totalAssigned: number;
+  totalBudgeted: number;
+  totalDisbursed: number;
   totalAvailable: number;
 };
 
 type BudgetTotalsRow = {
   total_income: number | string | null;
-  total_assigned: number | string | null;
+  total_budgeted: number | string | null;
+  total_disbursed: number | string | null;
   total_available: number | string | null;
 };
 
@@ -49,7 +51,8 @@ export async function fetchBudgetTotals() {
   return {
     data: {
       totalIncome: toNumber(row?.total_income),
-      totalAssigned: toNumber(row?.total_assigned),
+      totalBudgeted: toNumber(row?.total_budgeted),
+      totalDisbursed: toNumber(row?.total_disbursed),
       totalAvailable: toNumber(row?.total_available),
     } satisfies BudgetTotals,
     error: null,

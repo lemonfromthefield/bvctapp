@@ -54,7 +54,7 @@ export default function DashboardPage() {
         acceptedTickets: acceptedResult.count ?? 0,
         acceptedInPriorities: acceptedInPrioritiesResult.count ?? 0,
         availableFunds: budgetTotalsResult.data?.totalAvailable ?? 0,
-        totalDisbursed: budgetTotalsResult.data?.totalAssigned ?? 0,
+        totalDisbursed: budgetTotalsResult.data?.totalDisbursed ?? 0,
       });
     };
 

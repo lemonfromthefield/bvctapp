@@ -80,6 +80,7 @@ export default function TicketsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showOnlyMine, setShowOnlyMine] = useState(false);
   const [actionTicketId, setActionTicketId] = useState<string | null>(null);
+  const [revertingTicketId, setRevertingTicketId] = useState<string | null>(null);
   const [rejectingTicketId, setRejectingTicketId] = useState<string | null>(null);
   const [rejectionNotesById, setRejectionNotesById] = useState<Record<string, string>>({});
 
@@ -161,6 +162,8 @@ export default function TicketsPage() {
     [visibleTickets]
   );
 
+  const resolvedTicketsCount = acceptedTickets.length + deniedTickets.length;
+
   const canReviewTickets =
     currentRole === UserRole.JEFATURA ||
     currentRole === UserRole.COMISION_DIRECTIVA ||
@@ -236,6 +239,45 @@ export default function TicketsPage() {
     setActionTicketId(null);
   };
 
+  const revertTicketStage = async (ticket: TicketSummary) => {
+    if (!canReviewTickets) {
+      return;
+    }
+
+    setRevertingTicketId(ticket.id);
+    setError(null);
+
+    const { error: revertError } = await supabaseClient.rpc('reopen_ticket_review', {
+      p_ticket_id: ticket.id,
+      p_reason: 'Reversion manual desde modulo tickets',
+    });
+
+    if (revertError) {
+      setError(revertError.message);
+      setRevertingTicketId(null);
+      return;
+    }
+
+    setTickets((current) =>
+      current.map((currentTicket) =>
+        currentTicket.id === ticket.id
+          ? {
+              ...currentTicket,
+              status: 'PENDIENTE',
+            }
+          : currentTicket
+      )
+    );
+
+    setMetrics((current) => ({
+      pending: current.pending + 1,
+      accepted: ticket.status === 'ACEPTADO' ? Math.max(current.accepted - 1, 0) : current.accepted,
+      denied: ticket.status === 'RECHAZADO' ? Math.max(current.denied - 1, 0) : current.denied,
+    }));
+
+    setRevertingTicketId(null);
+  };
+
   const renderTicketRow = (ticket: TicketSummary, allowReviewActions: boolean) => {
     const previewPriority = getPreviewPriority(ticket);
 
@@ -276,6 +318,17 @@ export default function TicketsPage() {
                   Denegar
                 </Button>
               </>
+            ) : null}
+
+            {!allowReviewActions && canReviewTickets && (ticket.status === 'ACEPTADO' || ticket.status === 'RECHAZADO') ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={revertingTicketId === ticket.id}
+                onClick={() => revertTicketStage(ticket)}
+              >
+                {revertingTicketId === ticket.id ? 'Revirtiendo...' : 'Revertir etapa'}
+              </Button>
             ) : null}
 
             <Link
@@ -338,7 +391,37 @@ export default function TicketsPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      {error ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="space-y-3 rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-[#1f120f]">
+            Pendientes de resolver
+          </p>
+          <Badge variant="yellow">{pendingTickets.length}</Badge>
+        </div>
+        <p className="text-xs text-slate-600">
+          {showOnlyMine ? 'Mostrando solo tus tickets para revisión.' : 'Mostrando tickets visibles para tu rol.'}
+        </p>
+
+        {loading ? (
+          <p className="text-sm text-slate-600">Cargando tickets...</p>
+        ) : visibleTickets.length === 0 ? (
+          <p className="text-sm text-slate-600">No hay tickets para mostrar.</p>
+        ) : (
+          pendingTickets.length === 0 ? (
+            <p className="text-sm text-slate-600">No hay tickets pendientes.</p>
+          ) : (
+            <div className="space-y-3">{pendingTickets.map((ticket) => renderTicketRow(ticket, true))}</div>
+          )
+        )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
           <p className="text-sm font-medium text-[#6b4b42]">Pendientes</p>
           <p className="mt-2 text-3xl font-bold text-[#1f120f]">{metrics.pending}</p>
@@ -354,53 +437,35 @@ export default function TicketsPage() {
           <p className="mt-2 text-3xl font-bold text-[#1f120f]">{metrics.denied}</p>
           <p className="mt-1 text-sm text-slate-600">Solicitudes rechazadas.</p>
         </div>
+        <div className="rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
+          <p className="text-sm font-medium text-[#6b4b42]">Determinado</p>
+          <p className="mt-2 text-3xl font-bold text-[#1f120f]">{resolvedTicketsCount}</p>
+          <p className="mt-1 text-sm text-slate-600">Tickets que ya salieron de revisión.</p>
+        </div>
       </div>
 
-      {error ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+      <div className="space-y-6 rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
+        <div className="flex items-center justify-between gap-3 border-b border-[#ecd9cf] pb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[#7d5a4f]">Ya Determinado</h2>
+          <Badge variant="default">{resolvedTicketsCount}</Badge>
         </div>
-      ) : null}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-[#1f120f]">Aceptados</h2>
+          {acceptedTickets.length === 0 ? (
+            <p className="text-sm text-slate-600">No hay tickets aceptados.</p>
+          ) : (
+            <div className="space-y-3">{acceptedTickets.map((ticket) => renderTicketRow(ticket, false))}</div>
+          )}
+        </section>
 
-      <div className="space-y-3 rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
-        <p className="text-sm font-semibold text-[#1f120f]">
-          {showOnlyMine ? 'Mostrando solo tus tickets' : 'Mostrando tickets visibles para tu rol'}
-        </p>
-
-        {loading ? (
-          <p className="text-sm text-slate-600">Cargando tickets...</p>
-        ) : visibleTickets.length === 0 ? (
-          <p className="text-sm text-slate-600">No hay tickets para mostrar.</p>
-        ) : (
-          <div className="space-y-6">
-            <section className="space-y-3">
-              <h2 className="text-lg font-semibold text-[#1f120f]">Pendientes de revisión</h2>
-              {pendingTickets.length === 0 ? (
-                <p className="text-sm text-slate-600">No hay tickets pendientes.</p>
-              ) : (
-                <div className="space-y-3">{pendingTickets.map((ticket) => renderTicketRow(ticket, true))}</div>
-              )}
-            </section>
-
-            <section className="space-y-3">
-              <h2 className="text-lg font-semibold text-[#1f120f]">Aceptados</h2>
-              {acceptedTickets.length === 0 ? (
-                <p className="text-sm text-slate-600">No hay tickets aceptados.</p>
-              ) : (
-                <div className="space-y-3">{acceptedTickets.map((ticket) => renderTicketRow(ticket, false))}</div>
-              )}
-            </section>
-
-            <section className="space-y-3">
-              <h2 className="text-lg font-semibold text-[#1f120f]">Denegados</h2>
-              {deniedTickets.length === 0 ? (
-                <p className="text-sm text-slate-600">No hay tickets denegados.</p>
-              ) : (
-                <div className="space-y-3">{deniedTickets.map((ticket) => renderTicketRow(ticket, false))}</div>
-              )}
-            </section>
-          </div>
-        )}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-[#1f120f]">Denegados</h2>
+          {deniedTickets.length === 0 ? (
+            <p className="text-sm text-slate-600">No hay tickets denegados.</p>
+          ) : (
+            <div className="space-y-3">{deniedTickets.map((ticket) => renderTicketRow(ticket, false))}</div>
+          )}
+        </section>
       </div>
     </div>
   );

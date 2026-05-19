@@ -404,6 +404,24 @@ BEGIN
         NEW.id,
         jsonb_build_object('ticket_number', NEW.ticket_number)
       );
+    ELSIF NEW.status = 'PENDIENTE' AND OLD.status IN ('ACEPTADO', 'RECHAZADO', 'PRESUPUESTADO', 'EN_PROCESO', 'COMPLETADO') THEN
+      PERFORM public.insert_notification(
+        NEW.user_id,
+        'TICKET_MODIFIED',
+        'Ticket reabierto a revision',
+        'Tu ticket volvió a estado pendiente para una nueva revisión',
+        NEW.id,
+        jsonb_build_object('ticket_number', NEW.ticket_number, 'previous_status', OLD.status)
+      );
+    ELSIF OLD.status = 'COMPLETADO' AND NEW.status IN ('PRESUPUESTADO', 'ACEPTADO') THEN
+      PERFORM public.insert_notification(
+        NEW.user_id,
+        'TICKET_MODIFIED',
+        'Desembolso revertido',
+        'Se revirtió el desembolso de tu ticket y volvió a etapa presupuestaria',
+        NEW.id,
+        jsonb_build_object('ticket_number', NEW.ticket_number)
+      );
     END IF;
   END IF;
 
@@ -451,6 +469,17 @@ BEGIN
         'ticket_number', NEW.ticket_number,
         'assigned_amount', NEW.budget_assigned_amount
       )
+    );
+  ELSIF OLD.budget_assigned_amount IS DISTINCT FROM NEW.budget_assigned_amount
+     AND OLD.budget_assigned_amount IS NOT NULL
+     AND NEW.budget_assigned_amount IS NULL THEN
+    PERFORM public.insert_notification(
+      NEW.user_id,
+      'TICKET_MODIFIED',
+      'Presupuesto revertido',
+      'La asignación de presupuesto de tu ticket fue revertida',
+      NEW.id,
+      jsonb_build_object('ticket_number', NEW.ticket_number)
     );
   END IF;
 
@@ -564,7 +593,7 @@ AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION public.get_budget_totals()
-RETURNS TABLE(total_income NUMERIC, total_assigned NUMERIC, total_available NUMERIC)
+RETURNS TABLE(total_income NUMERIC, total_budgeted NUMERIC, total_disbursed NUMERIC, total_available NUMERIC)
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
@@ -577,16 +606,22 @@ BEGIN
     FROM budget_movements
     WHERE movement_type = 'INGRESO'
   ),
-  assigned_totals AS (
-    SELECT COALESCE(SUM(assigned_amount), 0)::NUMERIC AS total_assigned
+  budgeted_totals AS (
+    SELECT COALESCE(SUM(assigned_amount), 0)::NUMERIC AS total_budgeted
     FROM budgets
-    WHERE status IN ('ASIGNADO', 'DESEMBOLSADO', 'COMPROBADO')
+    WHERE status = 'ASIGNADO'
+  ),
+  disbursed_totals AS (
+    SELECT COALESCE(SUM(COALESCE(disbursed_amount, assigned_amount)), 0)::NUMERIC AS total_disbursed
+    FROM budgets
+    WHERE status IN ('DESEMBOLSADO', 'COMPROBADO')
   )
   SELECT
     income_totals.total_income,
-    assigned_totals.total_assigned,
-    GREATEST(income_totals.total_income - assigned_totals.total_assigned, 0)::NUMERIC AS total_available
-  FROM income_totals, assigned_totals;
+    budgeted_totals.total_budgeted,
+    disbursed_totals.total_disbursed,
+    GREATEST(income_totals.total_income - budgeted_totals.total_budgeted - disbursed_totals.total_disbursed, 0)::NUMERIC AS total_available
+  FROM income_totals, budgeted_totals, disbursed_totals;
 END;
 $$;
 
@@ -619,7 +654,11 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.assign_budget_to_ticket(p_ticket_id UUID, p_amount NUMERIC)
+CREATE OR REPLACE FUNCTION public.assign_budget_to_ticket(
+  p_ticket_id UUID,
+  p_amount NUMERIC,
+  p_notes TEXT DEFAULT NULL
+)
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -667,18 +706,8 @@ BEGIN
     RAISE EXCEPTION 'No hay fondos disponibles suficientes para esa asignación';
   END IF;
 
-  INSERT INTO budgets (ticket_id, assigned_amount, status, assigned_by)
-  VALUES (p_ticket_id, p_amount, 'ASIGNADO', auth.uid());
-
-  INSERT INTO budget_movements (area_id, movement_type, amount, concept, ticket_id, created_by)
-  VALUES (
-    ticket_record.area_id,
-    'EGRESO',
-    p_amount,
-    'Asignación de presupuesto para ticket #' || ticket_record.ticket_number || ' - ' || LEFT(ticket_record.concept, 120),
-    p_ticket_id,
-    auth.uid()
-  );
+  INSERT INTO budgets (ticket_id, assigned_amount, status, assigned_by, voucher_path)
+  VALUES (p_ticket_id, p_amount, 'ASIGNADO', auth.uid(), NULLIF(BTRIM(COALESCE(p_notes, '')), ''));
 
   UPDATE tickets
   SET budget_assigned_amount = p_amount,
@@ -688,12 +717,276 @@ BEGIN
       updated_at = now(),
       version = version + 1
   WHERE id = p_ticket_id;
+
+  INSERT INTO ticket_history (ticket_id, user_id, action, field_changed, old_value, new_value, timestamp)
+  VALUES (
+    p_ticket_id,
+    auth.uid(),
+    'BUDGET_ASSIGNED',
+    'budget_assigned_amount',
+    NULL,
+    p_amount::TEXT,
+    now()
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.unassign_budget_from_ticket(
+  p_ticket_id UUID,
+  p_reason TEXT DEFAULT NULL
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  budget_record RECORD;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Debes iniciar sesión para revertir presupuestos';
+  END IF;
+
+  IF public.get_my_role() NOT IN ('COMISION_DIRECTIVA', 'ADMIN') THEN
+    RAISE EXCEPTION 'Solo Comisión Directiva o Admin pueden revertir presupuestos';
+  END IF;
+
+  SELECT *
+  INTO budget_record
+  FROM budgets
+  WHERE ticket_id = p_ticket_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'El ticket no tiene presupuesto asignado';
+  END IF;
+
+  IF budget_record.status <> 'ASIGNADO' THEN
+    RAISE EXCEPTION 'Solo se pueden revertir presupuestos aun no desembolsados';
+  END IF;
+
+  DELETE FROM budgets WHERE id = budget_record.id;
+
+  UPDATE tickets
+  SET budget_assigned_amount = NULL,
+      budget_assignment_date = NULL,
+      budget_status = NULL,
+      status = CASE WHEN status = 'PRESUPUESTADO' THEN 'ACEPTADO' ELSE status END,
+      updated_at = now(),
+      version = version + 1
+  WHERE id = p_ticket_id;
+
+  INSERT INTO ticket_history (ticket_id, user_id, action, field_changed, old_value, new_value, timestamp)
+  VALUES (
+    p_ticket_id,
+    auth.uid(),
+    'BUDGET_UNASSIGNED',
+    'budget_assigned_amount',
+    budget_record.assigned_amount::TEXT,
+    NULLIF(BTRIM(COALESCE(p_reason, '')), ''),
+    now()
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.confirm_budget_disbursement(
+  p_budget_id UUID,
+  p_disbursed_amount NUMERIC DEFAULT NULL,
+  p_notes TEXT DEFAULT NULL
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  budget_record RECORD;
+  final_amount NUMERIC;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Debes iniciar sesión para confirmar desembolsos';
+  END IF;
+
+  IF public.get_my_role() NOT IN ('COMISION_DIRECTIVA', 'ADMIN') THEN
+    RAISE EXCEPTION 'Solo Comisión Directiva o Admin pueden confirmar desembolsos';
+  END IF;
+
+  SELECT *
+  INTO budget_record
+  FROM budgets
+  WHERE id = p_budget_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'No se encontró el presupuesto';
+  END IF;
+
+  IF budget_record.status <> 'ASIGNADO' THEN
+    RAISE EXCEPTION 'Solo se puede desembolsar un presupuesto asignado';
+  END IF;
+
+  final_amount := COALESCE(p_disbursed_amount, budget_record.assigned_amount);
+
+  IF final_amount <= 0 THEN
+    RAISE EXCEPTION 'El monto desembolsado debe ser mayor a cero';
+  END IF;
+
+  UPDATE budgets
+  SET status = 'DESEMBOLSADO',
+      disbursement_date = now(),
+      disbursed_amount = final_amount,
+      voucher_path = COALESCE(NULLIF(BTRIM(COALESCE(p_notes, '')), ''), voucher_path),
+      updated_at = now()
+  WHERE id = p_budget_id;
+
+  UPDATE tickets
+  SET status = 'COMPLETADO',
+      budget_status = 'DESEMBOLSADO',
+      disbursement_date = now(),
+      final_status = 'DESEMBOLSADO',
+      updated_at = now(),
+      version = version + 1
+  WHERE id = budget_record.ticket_id;
+
+  INSERT INTO ticket_history (ticket_id, user_id, action, field_changed, old_value, new_value, timestamp)
+  VALUES (
+    budget_record.ticket_id,
+    auth.uid(),
+    'DISBURSEMENT_CONFIRMED',
+    'disbursed_amount',
+    NULL,
+    final_amount::TEXT,
+    now()
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.revert_budget_disbursement(
+  p_budget_id UUID,
+  p_reason TEXT DEFAULT NULL
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  budget_record RECORD;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Debes iniciar sesión para revertir desembolsos';
+  END IF;
+
+  IF public.get_my_role() NOT IN ('COMISION_DIRECTIVA', 'ADMIN') THEN
+    RAISE EXCEPTION 'Solo Comisión Directiva o Admin pueden revertir desembolsos';
+  END IF;
+
+  SELECT *
+  INTO budget_record
+  FROM budgets
+  WHERE id = p_budget_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'No se encontró el presupuesto';
+  END IF;
+
+  IF budget_record.status NOT IN ('DESEMBOLSADO', 'COMPROBADO') THEN
+    RAISE EXCEPTION 'Solo se pueden revertir desembolsos confirmados';
+  END IF;
+
+  UPDATE budgets
+  SET status = 'ASIGNADO',
+      disbursement_date = NULL,
+      disbursed_amount = NULL,
+      updated_at = now()
+  WHERE id = p_budget_id;
+
+  UPDATE tickets
+  SET status = 'PRESUPUESTADO',
+      budget_status = 'ASIGNADO',
+      disbursement_date = NULL,
+      final_status = NULL,
+      updated_at = now(),
+      version = version + 1
+  WHERE id = budget_record.ticket_id;
+
+  INSERT INTO ticket_history (ticket_id, user_id, action, field_changed, old_value, new_value, timestamp)
+  VALUES (
+    budget_record.ticket_id,
+    auth.uid(),
+    'DISBURSEMENT_REVERTED',
+    'disbursement_date',
+    budget_record.disbursement_date::TEXT,
+    NULLIF(BTRIM(COALESCE(p_reason, '')), ''),
+    now()
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.reopen_ticket_review(
+  p_ticket_id UUID,
+  p_reason TEXT DEFAULT NULL
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  ticket_record RECORD;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Debes iniciar sesión para revertir estados';
+  END IF;
+
+  IF public.get_my_role() NOT IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN') THEN
+    RAISE EXCEPTION 'No tienes permisos para revertir este ticket';
+  END IF;
+
+  SELECT *
+  INTO ticket_record
+  FROM tickets
+  WHERE id = p_ticket_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'No se encontró el ticket';
+  END IF;
+
+  IF ticket_record.status NOT IN ('ACEPTADO', 'RECHAZADO') THEN
+    RAISE EXCEPTION 'Solo se pueden revertir tickets aceptados o denegados';
+  END IF;
+
+  UPDATE tickets
+  SET status = 'PENDIENTE',
+      acceptance_date = NULL,
+      rejection_date = NULL,
+      rejection_reason = NULL,
+      updated_at = now(),
+      version = version + 1
+  WHERE id = p_ticket_id;
+
+  INSERT INTO ticket_history (ticket_id, user_id, action, field_changed, old_value, new_value, timestamp)
+  VALUES (
+    p_ticket_id,
+    auth.uid(),
+    'STATUS_REVERTED',
+    'status',
+    ticket_record.status::TEXT,
+    COALESCE(NULLIF(BTRIM(COALESCE(p_reason, '')), ''), 'PENDIENTE'),
+    now()
+  );
 END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.get_budget_totals() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.register_budget_funds(NUMERIC, TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.assign_budget_to_ticket(UUID, NUMERIC) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.assign_budget_to_ticket(UUID, NUMERIC, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.unassign_budget_from_ticket(UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.confirm_budget_disbursement(UUID, NUMERIC, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.revert_budget_disbursement(UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.reopen_ticket_review(UUID, TEXT) TO authenticated;
 
 -- Areas: Everyone can read, only ADMIN can modify
 CREATE POLICY "areas_read_all" ON areas FOR SELECT
