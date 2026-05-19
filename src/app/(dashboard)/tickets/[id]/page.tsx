@@ -45,6 +45,10 @@ type HistoryRow = {
   profiles: { full_name: string; role: string } | null;
 };
 
+type HistoryRowRaw = Omit<HistoryRow, 'profiles'> & {
+  profiles: MaybeArray<{ full_name: string; role: string }>;
+};
+
 type AttachmentRow = {
   id: string;
   file_name: string;
@@ -53,6 +57,8 @@ type AttachmentRow = {
   mime_type: string | null;
   created_at: string;
 };
+
+type MaybeArray<T> = T | T[] | null;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -107,10 +113,16 @@ function statusVariant(status: string): 'default' | 'red' | 'orange' | 'yellow' 
   return map[status] ?? 'gray';
 }
 
+function firstOrNull<T>(value: MaybeArray<T>): T | null {
+  if (!value) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function TicketDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id: string }>();
+  const id = params?.id;
   const router = useRouter();
 
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
@@ -161,11 +173,24 @@ export default function TicketDetailPage() {
       if (ticketResult.error) {
         setError(ticketResult.error.message);
       } else {
-        setTicket(ticketResult.data as TicketDetail);
+        const rawTicket = ticketResult.data as Omit<TicketDetail, 'areas' | 'profiles'> & {
+          areas: MaybeArray<{ name: string; code: string }>;
+          profiles: MaybeArray<{ full_name: string; role: string }>;
+        };
+
+        setTicket({
+          ...rawTicket,
+          areas: firstOrNull(rawTicket.areas),
+          profiles: firstOrNull(rawTicket.profiles),
+        });
       }
 
       if (!historyResult.error) {
-        setHistory((historyResult.data ?? []) as HistoryRow[]);
+        const normalizedHistory = ((historyResult.data ?? []) as HistoryRowRaw[]).map((entry) => ({
+          ...entry,
+          profiles: firstOrNull(entry.profiles),
+        }));
+        setHistory(normalizedHistory);
       }
 
       if (!attachmentsResult.error) {
