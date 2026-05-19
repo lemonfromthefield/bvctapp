@@ -346,31 +346,29 @@ ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
 
+-- ============================================
+-- HELPER: role lookup without RLS recursion
+-- ============================================
+
+CREATE OR REPLACE FUNCTION public.get_my_role()
+RETURNS TEXT
+LANGUAGE SQL
+SECURITY DEFINER
+STABLE
+AS $$
+  SELECT role FROM profiles WHERE user_id = auth.uid();
+$$;
+
 -- Areas: Everyone can read, only ADMIN can modify
 CREATE POLICY "areas_read_all" ON areas FOR SELECT
   USING (true);
 
 CREATE POLICY "areas_modify_admin" ON areas FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE user_id = auth.uid() AND role = 'ADMIN'
-    )
-  );
+  WITH CHECK (get_my_role() = 'ADMIN');
 
 CREATE POLICY "areas_update_admin" ON areas FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE user_id = auth.uid() AND role = 'ADMIN'
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE user_id = auth.uid() AND role = 'ADMIN'
-    )
-  );
+  USING (get_my_role() = 'ADMIN')
+  WITH CHECK (get_my_role() = 'ADMIN');
 
 -- Profiles: Users can read their own, JEFATURA/COMISION/ADMIN can read all
 CREATE POLICY "profiles_read_own" ON profiles FOR SELECT
@@ -379,11 +377,7 @@ CREATE POLICY "profiles_read_own" ON profiles FOR SELECT
 CREATE POLICY "profiles_read_hierarchy" ON profiles FOR SELECT
   USING (
     user_id = auth.uid() OR
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE user_id = auth.uid()
-      AND role IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN')
-    )
+    get_my_role() IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN')
   );
 
 CREATE POLICY "profiles_update_own" ON profiles FOR UPDATE
@@ -391,39 +385,16 @@ CREATE POLICY "profiles_update_own" ON profiles FOR UPDATE
   WITH CHECK (user_id = auth.uid());
 
 CREATE POLICY "profiles_update_manage" ON profiles FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE user_id = auth.uid()
-      AND role IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN')
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE user_id = auth.uid()
-      AND role IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN')
-    )
-  );
+  USING (get_my_role() IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN'))
+  WITH CHECK (get_my_role() IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN'));
 
 -- Tickets: Complex visibility rules
 CREATE POLICY "tickets_read_own_or_visible" ON tickets FOR SELECT
   USING (
-    -- Creator can always see own
     user_id = auth.uid() OR
-    -- JEFATURA, COMISION, ADMIN can see all
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE user_id = auth.uid()
-      AND role IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN')
-    ) OR
-    -- REPRESENTANTE can see ACEPTADO and COMPLETADO tickets from others
+    get_my_role() IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN') OR
     (
-      EXISTS (
-        SELECT 1 FROM profiles
-        WHERE user_id = auth.uid()
-        AND role = 'REPRESENTANTE_AREA'
-      )
+      get_my_role() = 'REPRESENTANTE_AREA'
       AND status IN ('ACEPTADO', 'COMPLETADO', 'PRESUPUESTADO', 'EN_PROCESO')
     )
   );
@@ -433,23 +404,13 @@ CREATE POLICY "tickets_create" ON tickets FOR INSERT
 
 CREATE POLICY "tickets_update_owner_draft" ON tickets FOR UPDATE
   USING (
-    -- Owner can update BORRADOR/PENDIENTE tickets
     (user_id = auth.uid() AND status IN ('BORRADOR', 'PENDIENTE')) OR
-    -- JEFATURA/COMISION can update any non-final ticket
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE user_id = auth.uid()
-      AND role IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN')
-      AND status NOT IN ('ACEPTADO', 'RECHAZADO', 'COMPLETADO', 'CANCELADO')
-    )
+    (get_my_role() IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN')
+      AND status NOT IN ('ACEPTADO', 'RECHAZADO', 'COMPLETADO', 'CANCELADO'))
   )
   WITH CHECK (
     (user_id = auth.uid() AND status IN ('BORRADOR', 'PENDIENTE')) OR
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE user_id = auth.uid()
-      AND role IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN')
-    )
+    get_my_role() IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN')
   );
 
 -- Ticket History: Read based on ticket visibility
@@ -458,14 +419,10 @@ CREATE POLICY "ticket_history_read" ON ticket_history FOR SELECT
     EXISTS (
       SELECT 1 FROM tickets
       WHERE tickets.id = ticket_history.ticket_id
-      AND (
-        tickets.user_id = auth.uid() OR
-        EXISTS (
-          SELECT 1 FROM profiles
-          WHERE user_id = auth.uid()
-          AND role IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN')
+        AND (
+          tickets.user_id = auth.uid() OR
+          get_my_role() IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN')
         )
-      )
     )
   );
 

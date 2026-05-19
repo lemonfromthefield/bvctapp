@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabaseClient } from '@/lib/supabase/client';
@@ -152,6 +153,12 @@ export default function TicketsPage() {
                   <div className="flex items-center gap-2">
                     <Badge variant={getStatusBadgeVariant(ticket.status)}>{ticket.status}</Badge>
                     <Badge variant="gray">Prioridad: {ticket.assigned_priority}</Badge>
+                    <Link
+                      href={`/tickets/${ticket.id}`}
+                      className="rounded-xl border border-[#d9c2b7] bg-white px-3 py-1.5 text-xs font-semibold text-[#9a3d12] transition hover:bg-[#fde7d8]"
+                    >
+                      Ver detalle
+                    </Link>
                   </div>
                 </div>
               </div>
