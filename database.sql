@@ -325,9 +325,213 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION public.insert_notification(
+  p_user_id UUID,
+  p_type TEXT,
+  p_title TEXT,
+  p_message TEXT,
+  p_ticket_id UUID DEFAULT NULL,
+  p_data JSONB DEFAULT '{}'::jsonb
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF p_user_id IS NULL THEN
+    RETURN;
+  END IF;
+
+  INSERT INTO notifications (user_id, type, title, message, ticket_id, data, read)
+  VALUES (
+    p_user_id,
+    p_type,
+    p_title,
+    p_message,
+    p_ticket_id,
+    COALESCE(p_data, '{}'::jsonb),
+    false
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.notify_on_ticket_changes()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  jefatura_user RECORD;
+  comision_user RECORD;
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    FOR jefatura_user IN
+      SELECT user_id
+      FROM profiles
+      WHERE role = 'JEFATURA' AND is_active = true
+    LOOP
+      PERFORM public.insert_notification(
+        jefatura_user.user_id,
+        'TICKET_CREATED',
+        'Nuevo ticket para autorizar',
+        '¡Nuevo ticket para autorizar!',
+        NEW.id,
+        jsonb_build_object('ticket_number', NEW.ticket_number)
+      );
+    END LOOP;
+
+    RETURN NEW;
+  END IF;
+
+  IF OLD.status IS DISTINCT FROM NEW.status THEN
+    IF NEW.status = 'ACEPTADO' THEN
+      PERFORM public.insert_notification(
+        NEW.user_id,
+        'TICKET_ACCEPTED',
+        'Ticket aceptado',
+        'Tu ticket fue aceptado',
+        NEW.id,
+        jsonb_build_object('ticket_number', NEW.ticket_number)
+      );
+    ELSIF NEW.status = 'RECHAZADO' THEN
+      PERFORM public.insert_notification(
+        NEW.user_id,
+        'TICKET_REJECTED',
+        'Ticket denegado',
+        COALESCE('Tu ticket fue denegado. ' || NULLIF(BTRIM(NEW.rejection_reason), ''), 'Tu ticket fue denegado'),
+        NEW.id,
+        jsonb_build_object('ticket_number', NEW.ticket_number)
+      );
+    END IF;
+  END IF;
+
+  IF OLD.assigned_priority IS DISTINCT FROM NEW.assigned_priority THEN
+    PERFORM public.insert_notification(
+      NEW.user_id,
+      'PRIORITY_CHANGED',
+      'Prioridad modificada',
+      'La prioridad de tu ticket fue modificada',
+      NEW.id,
+      jsonb_build_object(
+        'ticket_number', NEW.ticket_number,
+        'previous_priority', OLD.assigned_priority,
+        'new_priority', NEW.assigned_priority
+      )
+    );
+
+    IF NEW.assigned_priority = 'URGENTE' AND OLD.assigned_priority IS DISTINCT FROM 'URGENTE' THEN
+      FOR comision_user IN
+        SELECT user_id
+        FROM profiles
+        WHERE role = 'COMISION_DIRECTIVA' AND is_active = true
+      LOOP
+        PERFORM public.insert_notification(
+          comision_user.user_id,
+          'PRIORITY_CHANGED',
+          'Ticket urgente',
+          'Hay un nuevo ticket urgente',
+          NEW.id,
+          jsonb_build_object('ticket_number', NEW.ticket_number)
+        );
+      END LOOP;
+    END IF;
+  END IF;
+
+  IF OLD.budget_assigned_amount IS DISTINCT FROM NEW.budget_assigned_amount
+     AND NEW.budget_assigned_amount IS NOT NULL THEN
+    PERFORM public.insert_notification(
+      NEW.user_id,
+      'BUDGET_ASSIGNED',
+      'Presupuesto asignado',
+      'Tu ticket tiene un presupuesto asignado',
+      NEW.id,
+      jsonb_build_object(
+        'ticket_number', NEW.ticket_number,
+        'assigned_amount', NEW.budget_assigned_amount
+      )
+    );
+  END IF;
+
+  IF (OLD.disbursement_date IS DISTINCT FROM NEW.disbursement_date AND NEW.disbursement_date IS NOT NULL)
+     OR (OLD.status IS DISTINCT FROM NEW.status AND NEW.status = 'COMPLETADO') THEN
+    PERFORM public.insert_notification(
+      NEW.user_id,
+      'TICKET_COMPLETED',
+      'Ticket finalizado',
+      'Tu ticket ya se encuentra finalizado',
+      NEW.id,
+      jsonb_build_object('ticket_number', NEW.ticket_number)
+    );
+  END IF;
+
+  IF NEW.status = 'ACEPTADO'
+     AND (NEW.assigned_priority = 'URGENTE' OR NEW.suggested_priority = 'URGENTE')
+     AND OLD.status IS DISTINCT FROM 'ACEPTADO' THEN
+    FOR comision_user IN
+      SELECT user_id
+      FROM profiles
+      WHERE role = 'COMISION_DIRECTIVA' AND is_active = true
+    LOOP
+      PERFORM public.insert_notification(
+        comision_user.user_id,
+        'PRIORITY_CHANGED',
+        'Ticket urgente',
+        'Hay un nuevo ticket urgente',
+        NEW.id,
+        jsonb_build_object('ticket_number', NEW.ticket_number)
+      );
+    END LOOP;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.notify_on_fund_load()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  jefatura_user RECORD;
+BEGIN
+  IF NEW.movement_type <> 'INGRESO' THEN
+    RETURN NEW;
+  END IF;
+
+  FOR jefatura_user IN
+    SELECT user_id
+    FROM profiles
+    WHERE role = 'JEFATURA' AND is_active = true
+  LOOP
+    PERFORM public.insert_notification(
+      jefatura_user.user_id,
+      'TICKET_MODIFIED',
+      'Disponibilidad de pagos actualizada',
+      'Se asignó nueva disponibilidad de pagos',
+      NULL,
+      jsonb_build_object('amount', NEW.amount)
+    );
+  END LOOP;
+
+  RETURN NEW;
+END;
+$$;
+
 CREATE TRIGGER ticket_history_trigger
 AFTER INSERT OR UPDATE ON tickets
 FOR EACH ROW EXECUTE FUNCTION log_ticket_changes();
+
+CREATE TRIGGER ticket_notifications_trigger
+AFTER INSERT OR UPDATE ON tickets
+FOR EACH ROW EXECUTE FUNCTION public.notify_on_ticket_changes();
+
+CREATE TRIGGER funds_notifications_trigger
+AFTER INSERT ON budget_movements
+FOR EACH ROW EXECUTE FUNCTION public.notify_on_fund_load();
 
 -- ============================================
 -- ROW LEVEL SECURITY (RLS)
@@ -358,6 +562,138 @@ STABLE
 AS $$
   SELECT role FROM profiles WHERE user_id = auth.uid();
 $$;
+
+CREATE OR REPLACE FUNCTION public.get_budget_totals()
+RETURNS TABLE(total_income NUMERIC, total_assigned NUMERIC, total_available NUMERIC)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  WITH income_totals AS (
+    SELECT COALESCE(SUM(amount), 0)::NUMERIC AS total_income
+    FROM budget_movements
+    WHERE movement_type = 'INGRESO'
+  ),
+  assigned_totals AS (
+    SELECT COALESCE(SUM(assigned_amount), 0)::NUMERIC AS total_assigned
+    FROM budgets
+    WHERE status IN ('ASIGNADO', 'DESEMBOLSADO', 'COMPROBADO')
+  )
+  SELECT
+    income_totals.total_income,
+    assigned_totals.total_assigned,
+    GREATEST(income_totals.total_income - assigned_totals.total_assigned, 0)::NUMERIC AS total_available
+  FROM income_totals, assigned_totals;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.register_budget_funds(p_amount NUMERIC, p_concept TEXT DEFAULT 'Carga de fondos disponibles')
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Debes iniciar sesión para cargar fondos';
+  END IF;
+
+  IF public.get_my_role() NOT IN ('COMISION_DIRECTIVA', 'ADMIN') THEN
+    RAISE EXCEPTION 'Solo Comisión Directiva o Admin pueden cargar fondos';
+  END IF;
+
+  IF p_amount IS NULL OR p_amount <= 0 THEN
+    RAISE EXCEPTION 'El monto a cargar debe ser mayor a cero';
+  END IF;
+
+  INSERT INTO budget_movements (movement_type, amount, concept, created_by)
+  VALUES (
+    'INGRESO',
+    p_amount,
+    COALESCE(NULLIF(BTRIM(COALESCE(p_concept, '')), ''), 'Carga de fondos disponibles'),
+    auth.uid()
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.assign_budget_to_ticket(p_ticket_id UUID, p_amount NUMERIC)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  ticket_record RECORD;
+  current_totals RECORD;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Debes iniciar sesión para asignar presupuestos';
+  END IF;
+
+  IF public.get_my_role() NOT IN ('COMISION_DIRECTIVA', 'ADMIN') THEN
+    RAISE EXCEPTION 'Solo Comisión Directiva o Admin pueden asignar presupuestos';
+  END IF;
+
+  IF p_amount IS NULL OR p_amount <= 0 THEN
+    RAISE EXCEPTION 'El monto a asignar debe ser mayor a cero';
+  END IF;
+
+  SELECT id, ticket_number, concept, status, area_id
+  INTO ticket_record
+  FROM tickets
+  WHERE id = p_ticket_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'No se encontró el ticket solicitado';
+  END IF;
+
+  IF ticket_record.status NOT IN ('ACEPTADO', 'PRESUPUESTADO', 'EN_PROCESO') THEN
+    RAISE EXCEPTION 'Solo se puede asignar presupuesto a tickets aceptados o en gestión';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM budgets WHERE ticket_id = p_ticket_id) THEN
+    RAISE EXCEPTION 'Ese ticket ya tiene un presupuesto asignado';
+  END IF;
+
+  SELECT *
+  INTO current_totals
+  FROM public.get_budget_totals();
+
+  IF COALESCE(current_totals.total_available, 0) < p_amount THEN
+    RAISE EXCEPTION 'No hay fondos disponibles suficientes para esa asignación';
+  END IF;
+
+  INSERT INTO budgets (ticket_id, assigned_amount, status, assigned_by)
+  VALUES (p_ticket_id, p_amount, 'ASIGNADO', auth.uid());
+
+  INSERT INTO budget_movements (area_id, movement_type, amount, concept, ticket_id, created_by)
+  VALUES (
+    ticket_record.area_id,
+    'EGRESO',
+    p_amount,
+    'Asignación de presupuesto para ticket #' || ticket_record.ticket_number || ' - ' || LEFT(ticket_record.concept, 120),
+    p_ticket_id,
+    auth.uid()
+  );
+
+  UPDATE tickets
+  SET budget_assigned_amount = p_amount,
+      budget_assignment_date = now(),
+      budget_status = 'ASIGNADO',
+      status = CASE WHEN status = 'ACEPTADO' THEN 'PRESUPUESTADO' ELSE status END,
+      updated_at = now(),
+      version = version + 1
+  WHERE id = p_ticket_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_budget_totals() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.register_budget_funds(NUMERIC, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.assign_budget_to_ticket(UUID, NUMERIC) TO authenticated;
 
 -- Areas: Everyone can read, only ADMIN can modify
 CREATE POLICY "areas_read_all" ON areas FOR SELECT
@@ -517,6 +853,10 @@ CREATE POLICY "budgets_modify_admin" ON budgets FOR INSERT
 -- Notifications: Users can only read their own
 CREATE POLICY "notifications_read_own" ON notifications FOR SELECT
   USING (user_id = auth.uid());
+
+CREATE POLICY "notifications_update_own" ON notifications FOR UPDATE
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
 
 -- Audit Logs: Only ADMIN can read
 CREATE POLICY "audit_logs_read_admin" ON audit_logs FOR SELECT

@@ -4,14 +4,17 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Ticket, AlertCircle, CheckCircle2, Layers } from 'lucide-react';
+import { Ticket, AlertCircle, CheckCircle2, Layers, Wallet } from 'lucide-react';
 import { supabaseClient } from '@/lib/supabase/client';
+import { fetchBudgetTotals, formatCurrency } from '@/lib/utils/budget-utils';
 
 type DashboardMetrics = {
   totalTickets: number;
   pendingTickets: number;
   acceptedTickets: number;
   acceptedInPriorities: number;
+  availableFunds: number;
+  totalDisbursed: number;
 };
 
 export default function DashboardPage() {
@@ -21,11 +24,13 @@ export default function DashboardPage() {
     pendingTickets: 0,
     acceptedTickets: 0,
     acceptedInPriorities: 0,
+    availableFunds: 0,
+    totalDisbursed: 0,
   });
 
   useEffect(() => {
     const loadMetrics = async () => {
-      const [totalResult, pendingResult, acceptedResult, acceptedInPrioritiesResult] = await Promise.all([
+      const [totalResult, pendingResult, acceptedResult, acceptedInPrioritiesResult, budgetTotalsResult] = await Promise.all([
         supabaseClient.from('tickets').select('id', { count: 'exact', head: true }),
         supabaseClient
           .from('tickets')
@@ -40,6 +45,7 @@ export default function DashboardPage() {
           .select('id', { count: 'exact', head: true })
           .eq('status', 'ACEPTADO')
           .neq('assigned_priority', 'SIN_PRIORIDAD'),
+        fetchBudgetTotals(),
       ]);
 
       setMetrics({
@@ -47,6 +53,8 @@ export default function DashboardPage() {
         pendingTickets: pendingResult.count ?? 0,
         acceptedTickets: acceptedResult.count ?? 0,
         acceptedInPriorities: acceptedInPrioritiesResult.count ?? 0,
+        availableFunds: budgetTotalsResult.data?.totalAvailable ?? 0,
+        totalDisbursed: budgetTotalsResult.data?.totalAssigned ?? 0,
       });
     };
 
@@ -66,7 +74,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Card className="overflow-hidden">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -118,6 +126,34 @@ export default function DashboardPage() {
                 <p className="mt-1 text-xs text-slate-500">Aceptados con prioridad asignada</p>
               </div>
               <div className="rounded-2xl bg-[#fce7e4] p-3 text-[#7f1d1d]">
+                <Layers className="h-7 w-7" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[#6b4b42]">Fondos Disponibles</p>
+                <p className="mt-2 text-2xl font-bold text-[#1f120f]">{formatCurrency(metrics.availableFunds)}</p>
+              </div>
+              <div className="rounded-2xl bg-[#ecfdf3] p-3 text-[#15803d]">
+                <Wallet className="h-7 w-7" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[#6b4b42]">Total Desembolsado</p>
+                <p className="mt-2 text-2xl font-bold text-[#1f120f]">{formatCurrency(metrics.totalDisbursed)}</p>
+              </div>
+              <div className="rounded-2xl bg-[#fff4e5] p-3 text-[#c2410c]">
                 <Layers className="h-7 w-7" />
               </div>
             </div>
