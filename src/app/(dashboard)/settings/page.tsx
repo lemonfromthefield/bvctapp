@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabaseClient } from '@/lib/supabase/client';
-import { getCurrentUser } from '@/lib/auth/supabase-auth';
+import { getCurrentUser, signOut } from '@/lib/auth/supabase-auth';
 import { ROLES_INFO, UserRole } from '@/types/roles';
 import type { Profile } from '@/types/users';
 
@@ -15,11 +16,13 @@ type Area = {
 };
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
   const [selectedRoleById, setSelectedRoleById] = useState<Record<string, UserRole>>({});
   const [selectedAreaById, setSelectedAreaById] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -114,17 +117,51 @@ export default function SettingsPage() {
     setSavingId(null);
   };
 
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    setError(null);
+
+    try {
+      await signOut();
+      router.replace('/login');
+    } catch (signOutError) {
+      setError(signOutError instanceof Error ? signOutError.message : 'No se pudo cerrar sesión.');
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
   if (loading) {
     return <p className="text-slate-600">Cargando configuración...</p>;
   }
 
   if (!canManageUsers) {
     return (
-      <div className="space-y-3 rounded-3xl border border-white/70 bg-[var(--surface)] p-6 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
-        <h1 className="text-2xl font-bold text-[#1f120f]">Configuración</h1>
-        <p className="text-slate-600">
-          Este módulo queda reservado para Comisión Directiva y Administradores.
-        </p>
+      <div className="space-y-4">
+        {error ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="space-y-3 rounded-3xl border border-white/70 bg-[var(--surface)] p-6 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
+          <h1 className="text-2xl font-bold text-[#1f120f]">Configuración</h1>
+          <p className="text-slate-600">
+            Este módulo queda reservado para Comisión Directiva y Administradores.
+          </p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Sesión</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-slate-600">Podés cerrar tu sesión de forma manual desde aquí.</p>
+            <Button variant="outline" onClick={handleSignOut} isLoading={signingOut}>
+              Cerrar sesión
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -222,6 +259,18 @@ export default function SettingsPage() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Sesión</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-slate-600">Podés cerrar tu sesión de forma manual desde aquí.</p>
+          <Button variant="outline" onClick={handleSignOut} isLoading={signingOut}>
+            Cerrar sesión
+          </Button>
         </CardContent>
       </Card>
     </div>

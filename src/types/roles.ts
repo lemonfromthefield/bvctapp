@@ -81,6 +81,7 @@ export const ROLE_PERMISSIONS: RolePermissionMap = {
     Permission.ASSIGN_PRIORITY,
     Permission.MODIFY_PRIORITY,
     Permission.REORDER_PRIORITIES,
+    Permission.VIEW_BUDGETS,
     Permission.UPLOAD_FILE,
     Permission.DELETE_FILE,
     Permission.VIEW_FILES,
