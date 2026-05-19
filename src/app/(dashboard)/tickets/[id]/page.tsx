@@ -42,11 +42,8 @@ type HistoryRow = {
   old_value: string | null;
   new_value: string | null;
   timestamp: string;
+  user_id: string;
   profiles: { full_name: string; role: string } | null;
-};
-
-type HistoryRowRaw = Omit<HistoryRow, 'profiles'> & {
-  profiles: MaybeArray<{ full_name: string; role: string }>;
 };
 
 type AttachmentRow = {
@@ -139,26 +136,41 @@ export default function TicketDetailPage() {
       setLoading(true);
       setError(null);
 
-      const [ticketResult, historyResult, attachmentsResult] = await Promise.all([
+      const [ticketResult, profileResult, historyResult, attachmentsResult] = await Promise.all([
         supabaseClient
           .from('tickets')
           .select(`
             id, ticket_number, concept, quantity, observations,
             status, suggested_priority, assigned_priority,
             request_date, acceptance_date, rejection_date, rejection_reason,
-            priority_assigned_date,
+            priority_assigned_date, user_id,
             budget_assigned_amount, budget_assignment_date, budget_status, disbursement_date,
-            areas ( name, code ),
-            profiles ( full_name, role )
+            areas ( name, code )
           `)
           .eq('id', id)
           .single(),
 
+        // Fetch profile separately since it's not a direct relation
+        (async () => {
+          const ticketRes = await supabaseClient
+            .from('tickets')
+            .select('user_id')
+            .eq('id', id)
+            .single();
+          
+          if (ticketRes.error || !ticketRes.data) return { data: null, error: ticketRes.error };
+          
+          return supabaseClient
+            .from('profiles')
+            .select('full_name, role')
+            .eq('user_id', ticketRes.data.user_id)
+            .single();
+        })(),
+
         supabaseClient
           .from('ticket_history')
           .select(`
-            id, action, field_changed, old_value, new_value, timestamp,
-            profiles ( full_name, role )
+            id, action, field_changed, old_value, new_value, timestamp, user_id
           `)
           .eq('ticket_id', id)
           .order('timestamp', { ascending: true }),
@@ -178,19 +190,58 @@ export default function TicketDetailPage() {
           profiles: MaybeArray<{ full_name: string; role: string }>;
         };
 
+        // Get profile from separate query result
+        const profileData = !profileResult.error && profileResult.data 
+          ? profileResult.data as { full_name: string; role: string }
+          : null;
+
         setTicket({
           ...rawTicket,
           areas: firstOrNull(rawTicket.areas),
-          profiles: firstOrNull(rawTicket.profiles),
+          profiles: profileData,
         });
       }
 
       if (!historyResult.error) {
-        const normalizedHistory = ((historyResult.data ?? []) as HistoryRowRaw[]).map((entry) => ({
-          ...entry,
-          profiles: firstOrNull(entry.profiles),
-        }));
-        setHistory(normalizedHistory);
+        const historyData = (historyResult.data ?? []) as Array<{
+          id: string;
+          action: string;
+          field_changed: string | null;
+          old_value: string | null;
+          new_value: string | null;
+          timestamp: string;
+          user_id: string;
+        }>;
+
+        // Get unique user IDs from history
+        const userIds = [...new Set(historyData.map(entry => entry.user_id))];
+        
+        if (userIds.length > 0) {
+          // Fetch profiles for these users
+          const { data: profilesData, error: profilesError } = await supabaseClient
+            .from('profiles')
+            .select('user_id, full_name, role')
+            .in('user_id', userIds);
+
+          if (!profilesError && profilesData) {
+            // Create a map for quick lookup
+            const profileMap = new Map(
+              (profilesData as Array<{ user_id: string; full_name: string; role: string }>)
+                .map(p => [p.user_id, { full_name: p.full_name, role: p.role }])
+            );
+
+            // Merge history with profiles
+            const normalizedHistory: HistoryRow[] = historyData.map(entry => ({
+              ...entry,
+              profiles: profileMap.get(entry.user_id) ?? null,
+            }));
+            setHistory(normalizedHistory);
+          } else {
+            setHistory(historyData.map(entry => ({ ...entry, profiles: null })));
+          }
+        } else {
+          setHistory([]);
+        }
       }
 
       if (!attachmentsResult.error) {
