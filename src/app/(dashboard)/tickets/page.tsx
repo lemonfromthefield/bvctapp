@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ModuleFoldSection } from '@/components/ui/module-fold-section';
 import { supabaseClient } from '@/lib/supabase/client';
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
 import { UserRole } from '@/types/roles';
@@ -79,6 +80,8 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showOnlyMine, setShowOnlyMine] = useState(false);
+  const [pendingSectionOpen, setPendingSectionOpen] = useState(true);
+  const [determinedSectionOpen, setDeterminedSectionOpen] = useState(false);
   const [actionTicketId, setActionTicketId] = useState<string | null>(null);
   const [revertingTicketId, setRevertingTicketId] = useState<string | null>(null);
   const [rejectingTicketId, setRejectingTicketId] = useState<string | null>(null);
@@ -397,13 +400,14 @@ export default function TicketsPage() {
         </div>
       ) : null}
 
-      <div className="space-y-3 rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-[#1f120f]">
-            Pendientes de resolver
-          </p>
-          <Badge variant="yellow">{pendingTickets.length}</Badge>
-        </div>
+      <ModuleFoldSection
+        title="Hay nuevas acciones por realizar"
+        count={pendingTickets.length}
+        status="pending"
+        isOpen={pendingSectionOpen}
+        onToggle={() => setPendingSectionOpen((current) => !current)}
+        emptyMessage="No hay tickets pendientes."
+      >
         <p className="text-xs text-slate-600">
           {showOnlyMine ? 'Mostrando solo tus tickets para revisión.' : 'Mostrando tickets visibles para tu rol.'}
         </p>
@@ -413,13 +417,9 @@ export default function TicketsPage() {
         ) : visibleTickets.length === 0 ? (
           <p className="text-sm text-slate-600">No hay tickets para mostrar.</p>
         ) : (
-          pendingTickets.length === 0 ? (
-            <p className="text-sm text-slate-600">No hay tickets pendientes.</p>
-          ) : (
-            <div className="space-y-3">{pendingTickets.map((ticket) => renderTicketRow(ticket, true))}</div>
-          )
+          <div className="space-y-3">{pendingTickets.map((ticket) => renderTicketRow(ticket, true))}</div>
         )}
-      </div>
+      </ModuleFoldSection>
 
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
@@ -444,11 +444,14 @@ export default function TicketsPage() {
         </div>
       </div>
 
-      <div className="space-y-6 rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
-        <div className="flex items-center justify-between gap-3 border-b border-[#ecd9cf] pb-3">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[#7d5a4f]">Ya Determinado</h2>
-          <Badge variant="default">{resolvedTicketsCount}</Badge>
-        </div>
+      <ModuleFoldSection
+        title="Ya determinado"
+        count={resolvedTicketsCount}
+        status="done"
+        isOpen={determinedSectionOpen}
+        onToggle={() => setDeterminedSectionOpen((current) => !current)}
+        emptyMessage="No hay tickets determinados todavía."
+      >
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-[#1f120f]">Aceptados</h2>
           {acceptedTickets.length === 0 ? (
@@ -466,7 +469,7 @@ export default function TicketsPage() {
             <div className="space-y-3">{deniedTickets.map((ticket) => renderTicketRow(ticket, false))}</div>
           )}
         </section>
-      </div>
+      </ModuleFoldSection>
     </div>
   );
 }

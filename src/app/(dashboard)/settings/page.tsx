@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { supabaseClient } from '@/lib/supabase/client';
 import { getCurrentUser, signOut } from '@/lib/auth/supabase-auth';
 import { ROLES_INFO, UserRole } from '@/types/roles';
@@ -17,15 +18,23 @@ type Area = {
 
 export default function SettingsPage() {
   const router = useRouter();
+  const [currentProfile, setCurrentProfile] = useState<Profile | null>(null);
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
+  const [profileName, setProfileName] = useState('');
+  const [profileEmail, setProfileEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [selectedRoleById, setSelectedRoleById] = useState<Record<string, UserRole>>({});
   const [selectedAreaById, setSelectedAreaById] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const canManageUsers = useMemo(
     () => currentRole === UserRole.COMISION_DIRECTIVA || currentRole === UserRole.ADMIN,
@@ -46,6 +55,20 @@ export default function SettingsPage() {
       }
 
       setCurrentRole(currentUser.role);
+      const { data: ownProfile, error: ownProfileError } = await supabaseClient
+        .from('profiles')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .single();
+
+      if (ownProfileError) {
+        setError(ownProfileError.message);
+      } else {
+        const normalizedProfile = ownProfile as Profile;
+        setCurrentProfile(normalizedProfile);
+        setProfileName(normalizedProfile.full_name ?? '');
+        setProfileEmail(normalizedProfile.email ?? '');
+      }
 
       if (currentUser.role !== UserRole.COMISION_DIRECTIVA && currentUser.role !== UserRole.ADMIN) {
         setLoading(false);
@@ -117,6 +140,89 @@ export default function SettingsPage() {
     setSavingId(null);
   };
 
+  const updateMyProfile = async () => {
+    if (!currentProfile) {
+      return;
+    }
+
+    if (profileName.trim().length < 3) {
+      setError('El nombre debe tener al menos 3 caracteres.');
+      return;
+    }
+
+    setSavingProfile(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const { error: profileError } = await supabaseClient
+      .from('profiles')
+      .update({
+        full_name: profileName.trim(),
+      })
+      .eq('id', currentProfile.id);
+
+    if (profileError) {
+      setError(profileError.message);
+      setSavingProfile(false);
+      return;
+    }
+
+    if (profileEmail.trim() !== currentProfile.email) {
+      const { error: authError } = await supabaseClient.auth.updateUser({
+        email: profileEmail.trim(),
+      });
+
+      if (authError) {
+        setError(authError.message);
+        setSavingProfile(false);
+        return;
+      }
+    }
+
+    setCurrentProfile((current) =>
+      current
+        ? {
+            ...current,
+            full_name: profileName.trim(),
+            email: profileEmail.trim(),
+          }
+        : null
+    );
+    setSuccessMessage('Perfil actualizado. Si cambiaste el correo, revisá tu email para confirmar el nuevo acceso.');
+    setSavingProfile(false);
+  };
+
+  const updateMyPassword = async () => {
+    if (newPassword.length < 8) {
+      setError('La nueva contraseña debe tener al menos 8 caracteres.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('La confirmación de contraseña no coincide.');
+      return;
+    }
+
+    setSavingPassword(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    const { error: passwordError } = await supabaseClient.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (passwordError) {
+      setError(passwordError.message);
+      setSavingPassword(false);
+      return;
+    }
+
+    setNewPassword('');
+    setConfirmPassword('');
+    setSuccessMessage('Contraseña actualizada correctamente.');
+    setSavingPassword(false);
+  };
+
   const handleSignOut = async () => {
     setSigningOut(true);
     setError(null);
@@ -173,12 +279,64 @@ export default function SettingsPage() {
         <p className="text-slate-600">Aprobación de usuarios y control básico de acceso.</p>
       </div>
 
+      {successMessage ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {successMessage}
+        </div>
+      ) : null}
+
       {error ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       ) : null}
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Mi perfil</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Input
+            label="Nombre y apellido"
+            value={profileName}
+            onChange={(event) => setProfileName(event.target.value)}
+          />
+          <Input
+            label="Correo electrónico"
+            type="email"
+            value={profileEmail}
+            onChange={(event) => setProfileEmail(event.target.value)}
+          />
+          <Button onClick={updateMyProfile} isLoading={savingProfile} disabled={savingProfile}>
+            Guardar perfil
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Seguridad de acceso</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Input
+            label="Nueva contraseña"
+            type="password"
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+          />
+          <Input
+            label="Confirmar nueva contraseña"
+            type="password"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+          />
+          <Button onClick={updateMyPassword} isLoading={savingPassword} disabled={savingPassword}>
+            Actualizar contraseña
+          </Button>
+        </CardContent>
+      </Card>
+
+      {canManageUsers ? (
       <Card>
         <CardHeader>
           <CardTitle>Usuarios registrados</CardTitle>
@@ -261,6 +419,7 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

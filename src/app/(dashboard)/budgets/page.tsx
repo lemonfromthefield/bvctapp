@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FilePicker } from '@/components/ui/file-picker';
 import { Input } from '@/components/ui/input';
+import { ModuleFoldSection } from '@/components/ui/module-fold-section';
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
 import { supabaseClient } from '@/lib/supabase/client';
 import { fetchBudgetTotals, formatCurrency, type BudgetTotals } from '@/lib/utils/budget-utils';
@@ -65,6 +66,8 @@ export default function BudgetsPage() {
   const [disbursementFilesByBudgetId, setDisbursementFilesByBudgetId] = useState<Record<string, File[]>>({});
   const [loading, setLoading] = useState(true);
   const [submittingFunds, setSubmittingFunds] = useState(false);
+  const [pendingSectionOpen, setPendingSectionOpen] = useState(true);
+  const [determinedSectionOpen, setDeterminedSectionOpen] = useState(false);
   const [confirmingDisbursementId, setConfirmingDisbursementId] = useState<string | null>(null);
   const [revertingDisbursementId, setRevertingDisbursementId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -298,17 +301,18 @@ export default function BudgetsPage() {
         </div>
       ) : null}
 
-      <div className="space-y-4 rounded-3xl border border-white/70 bg-[var(--surface)] p-6 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-[#1f120f]">Pendiente de resolver</h2>
-          <Badge variant="yellow">{pendingDisbursementBudgets.length}</Badge>
-        </div>
+      <ModuleFoldSection
+        title="Hay nuevas acciones por realizar"
+        count={pendingDisbursementBudgets.length}
+        status="pending"
+        isOpen={pendingSectionOpen}
+        onToggle={() => setPendingSectionOpen((current) => !current)}
+        emptyMessage="No hay presupuestos pendientes de desembolso."
+      >
         <p className="text-sm text-slate-600">Presupuestos ya asignados, pendientes de confirmación de pago efectivo y registro documental.</p>
 
         {loading ? (
           <p>Cargando asignaciones...</p>
-        ) : pendingDisbursementBudgets.length === 0 ? (
-          <p>No hay presupuestos pendientes de desembolso.</p>
         ) : (
           <div className="space-y-3">
             {pendingDisbursementBudgets.map((budget) => {
@@ -407,7 +411,7 @@ export default function BudgetsPage() {
             })}
           </div>
         )}
-      </div>
+      </ModuleFoldSection>
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
@@ -468,17 +472,17 @@ export default function BudgetsPage() {
         </div>
       ) : null}
 
-      <div className="rounded-3xl border border-dashed border-[#e7d3c8] bg-[#fff9f5] p-6 text-sm text-[#6b4b42] shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-[#1f120f]">Ya determinado</h2>
-          <Badge variant="default">{determinedBudgets.length}</Badge>
-        </div>
-        <p className="mb-4 text-sm text-slate-600">Desembolsos confirmados o movimientos cerrados con trazabilidad completa.</p>
-
+      <ModuleFoldSection
+        title="Ya determinado"
+        count={determinedBudgets.length}
+        status="done"
+        isOpen={determinedSectionOpen}
+        onToggle={() => setDeterminedSectionOpen((current) => !current)}
+        emptyMessage="No hay desembolsos confirmados todavía."
+      >
+        <p className="mb-2 text-sm text-slate-600">Desembolsos confirmados o movimientos cerrados con trazabilidad completa.</p>
         {loading ? (
           <p>Cargando asignaciones...</p>
-        ) : determinedBudgets.length === 0 ? (
-          <p>No hay desembolsos confirmados todavía.</p>
         ) : (
           <div className="space-y-3">
             {determinedBudgets.map((budget) => {
@@ -527,7 +531,7 @@ export default function BudgetsPage() {
             })}
           </div>
         )}
-      </div>
+      </ModuleFoldSection>
     </div>
   );
 }

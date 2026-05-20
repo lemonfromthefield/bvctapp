@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FilePicker } from '@/components/ui/file-picker';
+import { ModuleFoldSection } from '@/components/ui/module-fold-section';
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
 import { supabaseClient } from '@/lib/supabase/client';
 import { fetchBudgetTotals, formatCurrency, type BudgetTotals } from '@/lib/utils/budget-utils';
@@ -71,6 +72,9 @@ export default function PrioritiesPage() {
   const [budgetAmountById, setBudgetAmountById] = useState<Record<string, string>>({});
   const [budgetNotesById, setBudgetNotesById] = useState<Record<string, string>>({});
   const [budgetFilesById, setBudgetFilesById] = useState<Record<string, File[]>>({});
+  const [pendingSectionOpen, setPendingSectionOpen] = useState(true);
+  const [determinedSectionOpen, setDeterminedSectionOpen] = useState(false);
+  const [expandedPriorityByKey, setExpandedPriorityByKey] = useState<Record<string, boolean>>({});
   const [budgetTotals, setBudgetTotals] = useState<BudgetTotals>({
     totalIncome: 0,
     totalBudgeted: 0,
@@ -327,17 +331,16 @@ export default function PrioritiesPage() {
         </div>
       ) : null}
 
-      <div className="space-y-4 rounded-3xl border border-white/70 bg-[var(--surface)] p-6 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-[#1f120f]">Pendiente de resolver</h2>
-          <Badge variant="yellow">{pendingResolutionTickets.length}</Badge>
-        </div>
-        <p className="text-sm text-slate-600">Orden operativo con paneles desplegables para trabajar ticket por ticket sin saturación visual.</p>
-
+      <ModuleFoldSection
+        title="Hay nuevas acciones por realizar"
+        count={pendingResolutionTickets.length}
+        status="pending"
+        isOpen={pendingSectionOpen}
+        onToggle={() => setPendingSectionOpen((current) => !current)}
+        emptyMessage="No hay tickets pendientes por resolver en prioridades."
+      >
         {loading ? (
           <p className="text-sm text-slate-600">Cargando cola priorizada...</p>
-        ) : pendingResolutionTickets.length === 0 ? (
-          <p className="text-sm text-slate-600">No hay tickets pendientes por resolver en prioridades.</p>
         ) : (
           <div className="space-y-3">
             {pendingResolutionTickets.map((ticket) => (
@@ -442,7 +445,7 @@ export default function PrioritiesPage() {
             ))}
           </div>
         )}
-      </div>
+      </ModuleFoldSection>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
@@ -464,38 +467,37 @@ export default function PrioritiesPage() {
         </div>
       </div>
 
-      <div className="space-y-4 rounded-3xl border border-white/70 bg-[var(--surface)] p-6 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-[#1f120f]">Ya determinado</h2>
-          <Badge variant="default">{determinedTickets.length}</Badge>
-        </div>
-        {determinedTickets.length === 0 ? (
-          <p className="text-sm text-slate-600">Todavía no hay tickets cerrados en esta etapa.</p>
-        ) : (
-          <div className="space-y-2">
-            {determinedTickets.map((ticket) => (
-              <div key={ticket.id} className="rounded-2xl border border-[#ead8cf] bg-[#fff9f5] p-3">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm font-semibold text-[#1f120f]">#{ticket.ticket_number} - {ticket.concept}</p>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={getStatusBadgeVariant(ticket.status)}>{ticket.status}</Badge>
-                    <Link href={`/tickets/${ticket.id}`} className="text-xs font-semibold text-[#9a3d12] underline-offset-2 hover:underline">Ver ticket</Link>
-                  </div>
+      <ModuleFoldSection
+        title="Ya determinado"
+        count={determinedTickets.length}
+        status="done"
+        isOpen={determinedSectionOpen}
+        onToggle={() => setDeterminedSectionOpen((current) => !current)}
+        emptyMessage="Todavía no hay tickets cerrados en esta etapa."
+      >
+        <div className="space-y-2">
+          {determinedTickets.map((ticket) => (
+            <div key={ticket.id} className="rounded-2xl border border-[#ead8cf] bg-[#fff9f5] p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-semibold text-[#1f120f]">#{ticket.ticket_number} - {ticket.concept}</p>
+                <div className="flex items-center gap-2">
+                  <Badge variant={getStatusBadgeVariant(ticket.status)}>{ticket.status}</Badge>
+                  <Link href={`/tickets/${ticket.id}`} className="text-xs font-semibold text-[#9a3d12] underline-offset-2 hover:underline">Ver ticket</Link>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            </div>
+          ))}
+        </div>
+      </ModuleFoldSection>
 
-      <div className="space-y-4">
+      <div className="space-y-4 rounded-3xl border border-[#f0d8cc] bg-[linear-gradient(145deg,#fff8f2_0%,#ffeedd_100%)] p-6 shadow-[0_20px_45px_rgba(111,45,27,0.14)]">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold text-[#1f120f]">Categorias de prioridad</h2>
-          <p className="text-xs uppercase tracking-[0.16em] text-[#7d5a4f]">Vista sintetica</p>
+          <h2 className="text-xl font-semibold text-[#1f120f]">Panel de prioridades</h2>
+          <p className="text-xs uppercase tracking-[0.16em] text-[#7d5a4f]">Top 5 por categoría</p>
         </div>
         <div className="grid gap-4 xl:grid-cols-2">
           {groupedTickets.map(({ priority, tickets: priorityTickets }) => (
-            <div key={priority} className="rounded-3xl border border-white/70 bg-[linear-gradient(180deg,#fffefe_0%,#fff7f1_100%)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
+            <div key={priority} className="rounded-3xl border border-[#f1d5c6] bg-[linear-gradient(180deg,#fffefe_0%,#fff7f1_100%)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
               <div className="flex items-center justify-between gap-3 border-b border-[#ecd9cf] pb-3">
                 <h3 className="text-lg font-semibold text-[#1f120f]">{PRIORITY_RULES[priority].displayName}</h3>
                 <Badge variant={getPriorityBadgeVariant(priority)}>{priorityTickets.length}</Badge>
@@ -503,12 +505,29 @@ export default function PrioritiesPage() {
               {priorityTickets.length === 0 ? (
                 <p className="mt-3 text-sm text-slate-600">No hay tickets en esta categoria.</p>
               ) : (
-                <div className="mt-3 max-h-40 space-y-2 overflow-y-auto pr-1">
-                  {priorityTickets.map((ticket) => (
+                <div className="mt-3 space-y-2">
+                  {priorityTickets.slice(0, expandedPriorityByKey[priority] ? priorityTickets.length : 5).map((ticket) => (
                     <div key={ticket.id} className="rounded-xl border border-[#f0ddd2] bg-white/80 px-3 py-2">
                       <p className="text-sm text-slate-700">#{ticket.ticket_number} - {ticket.concept}</p>
                     </div>
                   ))}
+
+                  {priorityTickets.length > 5 ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedPriorityByKey((current) => ({
+                          ...current,
+                          [priority]: !current[priority],
+                        }))
+                      }
+                      className="rounded-xl border border-[#d7bfb0] bg-white px-3 py-1.5 text-xs font-semibold text-[#7d5a4f] transition hover:bg-[#fff3ea]"
+                    >
+                      {expandedPriorityByKey[priority]
+                        ? 'Volver a top 5'
+                        : `Ver ${priorityTickets.length - 5} más`}
+                    </button>
+                  ) : null}
                 </div>
               )}
             </div>

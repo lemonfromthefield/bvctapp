@@ -109,7 +109,8 @@ export async function signUpWithEmail(
   password: string,
   fullName: string,
   role: UserRole = UserRole.REPRESENTANTE_AREA,
-  areaId?: string
+  areaId?: string,
+  emailRedirectTo?: string
 ) {
   const { data, error: signUpError } = await supabaseClient.auth.signUp({
     email,
@@ -120,6 +121,7 @@ export async function signUpWithEmail(
         role,
         area_id: areaId,
       },
+      emailRedirectTo,
     },
   });
 

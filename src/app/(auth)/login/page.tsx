@@ -75,7 +75,8 @@ export default function LoginPage() {
     setMessage(null);
 
     try {
-      const result = await signUpWithEmail(email, password, fullName);
+      const emailRedirectTo = typeof window !== 'undefined' ? `${window.location.origin}/confirm` : undefined;
+      const result = await signUpWithEmail(email, password, fullName, UserRole.REPRESENTANTE_AREA, undefined, emailRedirectTo);
 
       if (result.session || result.user?.confirmed_at) {
         const currentUser = await getCurrentUser();
