@@ -16,9 +16,9 @@ export const metadata: Metadata = {
   title: 'Bomberos Voluntarios Colonia Tirolesa | Sistema de Gestión',
   description: 'Sistema de gestión integral para tickets, prioridades, presupuestos y usuarios.',
   icons: {
-    icon: '/src/app/icon.png',
-    shortcut: '/src/app/icon.png',
-    apple: '/src/app/icon.png',
+    icon: '/icon.png',
+    shortcut: '/icon.png',
+    apple: '/icon.png',
   },
 };
 
