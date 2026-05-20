@@ -148,8 +148,8 @@ export default function BudgetsPage() {
       return;
     }
 
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Ingresá un monto válido para cargar fondos.');
+    if (!Number.isFinite(amount) || amount === 0) {
+      setError('Ingresá un monto válido distinto de cero.');
       return;
     }
 
@@ -170,7 +170,11 @@ export default function BudgetsPage() {
 
     await loadData();
     setFundAmount('');
-    setSuccessMessage('Los fondos quedaron cargados y listos para nuevas asignaciones.');
+    setSuccessMessage(
+      amount > 0
+        ? 'Los fondos quedaron cargados y listos para nuevas asignaciones.'
+        : 'Se registró el ajuste negativo y se descontó del disponible.'
+    );
     setSubmittingFunds(false);
   };
 
@@ -425,7 +429,7 @@ export default function BudgetsPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-xl font-semibold text-[#1f120f]">Cargar disponibilidad</h2>
-              <p className="mt-1 text-sm text-slate-600">Este monto incrementa el total disponible para asignar presupuestos.</p>
+              <p className="mt-1 text-sm text-slate-600">Podés registrar montos positivos (ingreso) o negativos (ajuste que descuenta del disponible).</p>
             </div>
             <Link href="/priorities">
               <Button variant="outline">Ir a Prioridades</Button>
@@ -436,11 +440,10 @@ export default function BudgetsPage() {
             <Input
               label="Monto"
               type="number"
-              min="0"
-              step="1"
+              step="0.01"
               value={fundAmount}
               onChange={(event) => setFundAmount(event.target.value)}
-              placeholder="Ej. 250000"
+              placeholder="Ej. 250000 o -15000"
             />
             <Input
               label="Concepto"

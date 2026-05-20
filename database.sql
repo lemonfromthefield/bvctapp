@@ -527,10 +527,6 @@ AS $$
 DECLARE
   jefatura_user RECORD;
 BEGIN
-  IF NEW.movement_type <> 'INGRESO' THEN
-    RETURN NEW;
-  END IF;
-
   FOR jefatura_user IN
     SELECT user_id
     FROM profiles
@@ -540,9 +536,12 @@ BEGIN
       jefatura_user.user_id,
       'TICKET_MODIFIED',
       'Disponibilidad de pagos actualizada',
-      'Se asignó nueva disponibilidad de pagos',
+      CASE
+        WHEN NEW.movement_type = 'INGRESO' THEN 'Se registró un ingreso de fondos disponibles'
+        ELSE 'Se registró un ajuste negativo de fondos disponibles'
+      END,
       NULL,
-      jsonb_build_object('amount', NEW.amount)
+      jsonb_build_object('amount', NEW.amount, 'movement_type', NEW.movement_type)
     );
   END LOOP;
 
@@ -600,10 +599,11 @@ SET search_path = public
 AS $$
 BEGIN
   RETURN QUERY
-  WITH income_totals AS (
-    SELECT COALESCE(SUM(amount), 0)::NUMERIC AS total_income
+  WITH movement_totals AS (
+    SELECT
+      COALESCE(SUM(CASE WHEN movement_type = 'INGRESO' THEN amount ELSE 0 END), 0)::NUMERIC AS total_income,
+      COALESCE(SUM(CASE WHEN movement_type = 'EGRESO' THEN amount ELSE 0 END), 0)::NUMERIC AS total_expense
     FROM budget_movements
-    WHERE movement_type = 'INGRESO'
   ),
   budgeted_totals AS (
     SELECT COALESCE(SUM(assigned_amount), 0)::NUMERIC AS total_budgeted
@@ -616,11 +616,11 @@ BEGIN
     WHERE status IN ('DESEMBOLSADO', 'COMPROBADO')
   )
   SELECT
-    income_totals.total_income,
+    movement_totals.total_income,
     budgeted_totals.total_budgeted,
     disbursed_totals.total_disbursed,
-    GREATEST(income_totals.total_income - budgeted_totals.total_budgeted - disbursed_totals.total_disbursed, 0)::NUMERIC AS total_available
-  FROM income_totals, budgeted_totals, disbursed_totals;
+    (movement_totals.total_income - movement_totals.total_expense - budgeted_totals.total_budgeted - disbursed_totals.total_disbursed)::NUMERIC AS total_available
+  FROM movement_totals, budgeted_totals, disbursed_totals;
 END;
 $$;
 
@@ -630,6 +630,8 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  movement_record RECORD;
 BEGIN
   IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'Debes iniciar sesión para cargar fondos';
@@ -639,16 +641,31 @@ BEGIN
     RAISE EXCEPTION 'Solo Comisión Directiva o Admin pueden cargar fondos';
   END IF;
 
-  IF p_amount IS NULL OR p_amount <= 0 THEN
-    RAISE EXCEPTION 'El monto a cargar debe ser mayor a cero';
+  IF p_amount IS NULL OR p_amount = 0 THEN
+    RAISE EXCEPTION 'El monto no puede ser cero';
   END IF;
 
   INSERT INTO budget_movements (movement_type, amount, concept, created_by)
   VALUES (
-    'INGRESO',
-    p_amount,
+    CASE WHEN p_amount > 0 THEN 'INGRESO' ELSE 'EGRESO' END,
+    ABS(p_amount),
     COALESCE(NULLIF(BTRIM(COALESCE(p_concept, '')), ''), 'Carga de fondos disponibles'),
     auth.uid()
+  )
+  RETURNING id, movement_type, amount, concept INTO movement_record;
+
+  INSERT INTO audit_logs (user_id, action, entity_type, entity_id, changes)
+  VALUES (
+    auth.uid(),
+    CASE WHEN movement_record.movement_type = 'INGRESO' THEN 'FUNDS_ADDED' ELSE 'FUNDS_WITHDRAWN' END,
+    'budget_movement',
+    movement_record.id::TEXT,
+    jsonb_build_object(
+      'movement_type', movement_record.movement_type,
+      'amount', movement_record.amount,
+      'concept', movement_record.concept,
+      'signed_amount', p_amount
+    )
   );
 END;
 $$;
@@ -739,6 +756,7 @@ AS $$
 DECLARE
   ticket_record RECORD;
   current_totals RECORD;
+  budget_record RECORD;
 BEGIN
   IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'Debes iniciar sesión para asignar presupuestos';
@@ -779,7 +797,8 @@ BEGIN
   END IF;
 
   INSERT INTO budgets (ticket_id, assigned_amount, status, assigned_by, voucher_path)
-  VALUES (p_ticket_id, p_amount, 'ASIGNADO', auth.uid(), NULLIF(BTRIM(COALESCE(p_notes, '')), ''));
+  VALUES (p_ticket_id, p_amount, 'ASIGNADO', auth.uid(), NULLIF(BTRIM(COALESCE(p_notes, '')), ''))
+  RETURNING id, assigned_amount, status INTO budget_record;
 
   UPDATE tickets
   SET budget_assigned_amount = p_amount,
@@ -799,6 +818,20 @@ BEGIN
     NULL,
     p_amount::TEXT,
     now()
+  );
+
+  INSERT INTO audit_logs (user_id, action, entity_type, entity_id, changes)
+  VALUES (
+    auth.uid(),
+    'BUDGET_ASSIGNED',
+    'budget',
+    budget_record.id::TEXT,
+    jsonb_build_object(
+      'ticket_id', p_ticket_id,
+      'assigned_amount', budget_record.assigned_amount,
+      'status', budget_record.status,
+      'notes', NULLIF(BTRIM(COALESCE(p_notes, '')), '')
+    )
   );
 END;
 $$;
@@ -929,6 +962,20 @@ BEGIN
     NULL,
     final_amount::TEXT,
     now()
+  );
+
+  INSERT INTO audit_logs (user_id, action, entity_type, entity_id, changes)
+  VALUES (
+    auth.uid(),
+    'DISBURSEMENT_CONFIRMED',
+    'budget',
+    budget_record.id::TEXT,
+    jsonb_build_object(
+      'ticket_id', budget_record.ticket_id,
+      'assigned_amount', budget_record.assigned_amount,
+      'disbursed_amount', final_amount,
+      'notes', NULLIF(BTRIM(COALESCE(p_notes, '')), '')
+    )
   );
 END;
 $$;
