@@ -49,6 +49,7 @@ export default function TicketsPage() {
   const [determinedSectionOpen, setDeterminedSectionOpen] = useState(false);
   const [actionTicketId, setActionTicketId] = useState<string | null>(null);
   const [revertingTicketId, setRevertingTicketId] = useState<string | null>(null);
+  const [suspendingTicketId, setSuspendingTicketId] = useState<string | null>(null);
   const [rejectingTicketId, setRejectingTicketId] = useState<string | null>(null);
   const [rejectionNotesById, setRejectionNotesById] = useState<Record<string, string>>({});
 
@@ -246,6 +247,45 @@ export default function TicketsPage() {
     setRevertingTicketId(null);
   };
 
+  const suspendAcceptedTicket = async (ticket: TicketSummary) => {
+    if (!canReviewTickets || (currentRole !== UserRole.COMISION_DIRECTIVA && currentRole !== UserRole.ADMIN)) {
+      return;
+    }
+
+    setSuspendingTicketId(ticket.id);
+    setError(null);
+
+    const { error: suspendError } = await supabaseClient.rpc('suspend_ticket_to_draft', {
+      p_ticket_id: ticket.id,
+      p_reason: 'Suspension manual desde modulo tickets',
+    });
+
+    if (suspendError) {
+      setError(suspendError.message);
+      setSuspendingTicketId(null);
+      return;
+    }
+
+    setTickets((current) =>
+      current.map((currentTicket) =>
+        currentTicket.id === ticket.id
+          ? {
+              ...currentTicket,
+              status: 'BORRADOR',
+            }
+          : currentTicket
+      )
+    );
+
+    setMetrics((current) => ({
+      pending: current.pending + 1,
+      accepted: Math.max(current.accepted - 1, 0),
+      denied: current.denied,
+    }));
+
+    setSuspendingTicketId(null);
+  };
+
   const renderTicketRow = (ticket: TicketSummary, allowReviewActions: boolean) => {
     const previewPriority = getPreviewPriority(ticket);
 
@@ -286,7 +326,18 @@ export default function TicketsPage() {
               </>
             ) : null}
 
-            {!allowReviewActions && canReviewTickets && (ticket.status === 'ACEPTADO' || ticket.status === 'RECHAZADO') ? (
+            {!allowReviewActions && canReviewTickets && ticket.status === 'ACEPTADO' && (currentRole === UserRole.COMISION_DIRECTIVA || currentRole === UserRole.ADMIN) ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={suspendingTicketId === ticket.id}
+                onClick={() => suspendAcceptedTicket(ticket)}
+              >
+                {suspendingTicketId === ticket.id ? 'Suspendiendo...' : 'Suspender (volver a borrador)'}
+              </Button>
+            ) : null}
+
+            {!allowReviewActions && canReviewTickets && ticket.status === 'RECHAZADO' ? (
               <Button
                 size="sm"
                 variant="outline"

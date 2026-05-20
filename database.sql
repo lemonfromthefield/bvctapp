@@ -1099,6 +1099,89 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.suspend_ticket_to_draft(
+  p_ticket_id UUID,
+  p_reason TEXT DEFAULT NULL
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  ticket_record RECORD;
+  suspension_reason TEXT;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Debes iniciar sesión para suspender tickets';
+  END IF;
+
+  IF public.get_my_role() NOT IN ('COMISION_DIRECTIVA', 'ADMIN') THEN
+    RAISE EXCEPTION 'Solo Comisión Directiva o Admin pueden suspender tickets';
+  END IF;
+
+  SELECT *
+  INTO ticket_record
+  FROM tickets
+  WHERE id = p_ticket_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'No se encontró el ticket';
+  END IF;
+
+  IF ticket_record.status <> 'ACEPTADO' THEN
+    RAISE EXCEPTION 'Solo se pueden suspender tickets en estado aceptado';
+  END IF;
+
+  suspension_reason := COALESCE(NULLIF(BTRIM(COALESCE(p_reason, '')), ''), 'Suspension administrativa: vuelve a borrador');
+
+  UPDATE tickets
+  SET status = 'BORRADOR',
+      acceptance_date = NULL,
+      rejection_date = NULL,
+      rejection_reason = NULL,
+      updated_at = now(),
+      version = version + 1
+  WHERE id = p_ticket_id;
+
+  INSERT INTO ticket_history (ticket_id, user_id, action, field_changed, old_value, new_value, timestamp)
+  VALUES (
+    p_ticket_id,
+    auth.uid(),
+    'TICKET_SUSPENDED',
+    'status',
+    ticket_record.status::TEXT,
+    'BORRADOR',
+    now()
+  );
+
+  INSERT INTO ticket_history (ticket_id, user_id, action, field_changed, old_value, new_value, timestamp)
+  VALUES (
+    p_ticket_id,
+    auth.uid(),
+    'SUSPENSION_REASON',
+    'suspension_reason',
+    NULL,
+    suspension_reason,
+    now()
+  );
+
+  INSERT INTO audit_logs (user_id, action, entity_type, entity_id, changes)
+  VALUES (
+    auth.uid(),
+    'TICKET_SUSPENDED',
+    'ticket',
+    p_ticket_id::TEXT,
+    jsonb_build_object(
+      'old_status', ticket_record.status,
+      'new_status', 'BORRADOR',
+      'reason', suspension_reason
+    )
+  );
+END;
+$$;
+
 GRANT EXECUTE ON FUNCTION public.get_budget_totals() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.register_budget_funds(NUMERIC, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.assign_ticket_priority(UUID, TEXT, TEXT) TO authenticated;
@@ -1107,6 +1190,7 @@ GRANT EXECUTE ON FUNCTION public.unassign_budget_from_ticket(UUID, TEXT) TO auth
 GRANT EXECUTE ON FUNCTION public.confirm_budget_disbursement(UUID, NUMERIC, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.revert_budget_disbursement(UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.reopen_ticket_review(UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.suspend_ticket_to_draft(UUID, TEXT) TO authenticated;
 
 -- Areas: Everyone can read, only ADMIN can modify
 CREATE POLICY "areas_read_all" ON areas FOR SELECT
