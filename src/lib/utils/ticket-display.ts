@@ -45,8 +45,9 @@ export function getTicketStatusBadgeVariant(status: string): 'default' | 'red' |
 }
 
 export function getTicketPriorityBadgeVariant(
-  priority: TicketPriority
-): 'priorityUrgent' | 'priorityHigh' | 'priorityMedium' | 'priorityLow' | 'priorityNone' {
+  priority: TicketPriority | 'TERMINADO'
+): 'priorityUrgent' | 'priorityHigh' | 'priorityMedium' | 'priorityLow' | 'priorityNone' | 'priorityTerminado' {
+  if (priority === 'TERMINADO') return 'priorityTerminado';
   switch (priority) {
     case TicketPriority.URGENTE:
       return 'priorityUrgent';
@@ -61,7 +62,17 @@ export function getTicketPriorityBadgeVariant(
   }
 }
 
-export function getTicketPriorityCardStyles(priority: TicketPriority) {
+export function getTicketPriorityCardStyles(priority: TicketPriority | 'TERMINADO') {
+  if (priority === 'TERMINADO') {
+    return {
+      container: 'border-gray-300 bg-gray-100 text-gray-500',
+      title: 'text-gray-500',
+      value: 'text-gray-500',
+      description: 'text-gray-400',
+      iconContainer: 'bg-gray-200',
+      icon: 'text-gray-400',
+    };
+  }
   switch (priority) {
     case TicketPriority.URGENTE:
       return {
@@ -74,38 +85,38 @@ export function getTicketPriorityCardStyles(priority: TicketPriority) {
       };
     case TicketPriority.ALTA_IMPORTANCIA:
       return {
-        container: 'border-[#14532d] bg-[#14532d] text-white',
-        title: 'text-white/95',
-        value: 'text-white',
-        description: 'text-white/85',
-        iconContainer: 'bg-white/20',
-        icon: 'text-white',
-      };
-    case TicketPriority.MEDIA_IMPORTANCIA:
-      return {
-        container: 'border-[#15803d] bg-[#15803d] text-white',
-        title: 'text-white/95',
-        value: 'text-white',
-        description: 'text-white/85',
-        iconContainer: 'bg-white/20',
-        icon: 'text-white',
-      };
-    case TicketPriority.BAJA_IMPORTANCIA:
-      return {
-        container: 'border-[#4ade80] bg-[#dcfce7] text-[#14532d]',
+        container: 'border-[#14532d] bg-white text-[#14532d]',
         title: 'text-[#14532d]',
         value: 'text-[#14532d]',
         description: 'text-[#166534]',
-        iconContainer: 'bg-[#86efac]',
+        iconContainer: 'bg-[#bbf7d0]',
         icon: 'text-[#14532d]',
+      };
+    case TicketPriority.MEDIA_IMPORTANCIA:
+      return {
+        container: 'border-[#15803d] bg-white text-[#15803d]',
+        title: 'text-[#15803d]',
+        value: 'text-[#15803d]',
+        description: 'text-[#166534]',
+        iconContainer: 'bg-[#bbf7d0]',
+        icon: 'text-[#15803d]',
+      };
+    case TicketPriority.BAJA_IMPORTANCIA:
+      return {
+        container: 'border-[#4ade80] bg-white text-[#166534]',
+        title: 'text-[#166534]',
+        value: 'text-[#166534]',
+        description: 'text-[#166534]',
+        iconContainer: 'bg-[#dcfce7]',
+        icon: 'text-[#166534]',
       };
     default:
       return {
-        container: 'border-[#1d4ed8] bg-[#dbeafe] text-[#1e3a8a]',
+        container: 'border-[#1d4ed8] bg-white text-[#1e3a8a]',
         title: 'text-[#1e3a8a]',
         value: 'text-[#1e3a8a]',
         description: 'text-[#1e40af]',
-        iconContainer: 'bg-[#93c5fd]',
+        iconContainer: 'bg-[#dbeafe]',
         icon: 'text-[#1e3a8a]',
       };
   }

@@ -40,7 +40,9 @@ export function TicketIdentityBlock({
 
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <Badge variant={getTicketStatusBadgeVariant(status)}>{TICKET_STATUS_LABELS[status] ?? status.replace(/_/g, ' ')}</Badge>
-        <Badge variant={getTicketPriorityBadgeVariant(normalizedPriority)}>{getTicketPriorityLabel(assignedPriority)}</Badge>
+        <Badge variant={status === 'COMPLETADO' || status === 'RECHAZADO' ? 'priorityTerminado' : getTicketPriorityBadgeVariant(normalizedPriority)}>
+          {status === 'COMPLETADO' || status === 'RECHAZADO' ? 'Terminado' : getTicketPriorityLabel(assignedPriority)}
+        </Badge>
         <span className="rounded-full border border-[#d7bfb0] bg-white px-3 py-1 font-semibold text-[#7d5a4f]">
           {getBudgetSummaryLabel(budgetStatus, budgetAmount)}
         </span>

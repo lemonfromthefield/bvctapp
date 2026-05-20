@@ -12,7 +12,8 @@ interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
     | 'priorityHigh'
     | 'priorityMedium'
     | 'priorityLow'
-    | 'priorityNone';
+    | 'priorityNone'
+    | 'priorityTerminado';
 }
 
 export function Badge({ className, variant = 'default', children, ...props }: BadgeProps) {
@@ -24,10 +25,11 @@ export function Badge({ className, variant = 'default', children, ...props }: Ba
     blue: 'bg-blue-100 text-blue-900',
     gray: 'bg-gray-100 text-gray-900',
     priorityUrgent: 'bg-[#b91c1c] text-white',
-    priorityHigh: 'bg-[#14532d] text-white',
-    priorityMedium: 'bg-[#15803d] text-white',
-    priorityLow: 'bg-[#bbf7d0] text-[#14532d]',
-    priorityNone: 'bg-[#dbeafe] text-[#1e3a8a]',
+    priorityHigh: 'bg-white border border-[#14532d] text-[#14532d]',
+    priorityMedium: 'bg-white border border-[#15803d] text-[#15803d]',
+    priorityLow: 'bg-white border border-[#4ade80] text-[#166534]',
+    priorityNone: 'bg-white border border-[#1d4ed8] text-[#1e3a8a]',
+    priorityTerminado: 'bg-gray-100 text-gray-500 border border-gray-300',
   };
 
   return (
