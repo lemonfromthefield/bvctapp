@@ -238,11 +238,21 @@ export default function PrioritiesPage() {
     setBudgetSubmittingId(ticket.id);
     setError(null);
 
-    const { error: assignError } = await supabaseClient.rpc('assign_budget_to_ticket', {
+    let { error: assignError } = await supabaseClient.rpc('assign_budget_to_ticket', {
       p_ticket_id: ticket.id,
       p_amount: amount,
       p_notes: budgetNotesById[ticket.id] ?? null,
     });
+
+    // Compatibility fallback for environments that still expose legacy argument names.
+    if (assignError?.message?.includes('Could not find the function public.assign_budget_to_ticket')) {
+      const fallback = await supabaseClient.rpc('assign_budget_to_ticket', {
+        ticket_id: ticket.id,
+        amount,
+        notes: budgetNotesById[ticket.id] ?? null,
+      });
+      assignError = fallback.error;
+    }
 
     if (assignError) {
       setError(assignError.message);

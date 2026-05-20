@@ -17,6 +17,7 @@ type DashboardTicketRow = {
   user_id: string;
   status: string;
   assigned_priority: string;
+  request_date: string;
   budget_assigned_amount: number | null;
   budget_status: string | null;
 };
@@ -29,6 +30,7 @@ type DashboardBudgetRow = {
 };
 
 type ScopeFilter = 'all' | 'mine';
+type StatsPeriod = 'weekly' | 'monthly' | 'yearly';
 
 const PRIORITY_ORDER = Object.values(TicketPriority).sort((left, right) => {
   const leftPriority = parseTicketPriority(left);
@@ -86,6 +88,7 @@ export default function DashboardPage() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>('weekly');
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -105,7 +108,7 @@ export default function DashboardPage() {
       const [ticketsResult, budgetsResult, budgetTotalsResult] = await Promise.all([
         supabaseClient
           .from('tickets')
-          .select('id, user_id, status, assigned_priority, budget_assigned_amount, budget_status')
+          .select('id, user_id, status, assigned_priority, request_date, budget_assigned_amount, budget_status')
           .order('request_date', { ascending: false }),
         supabaseClient
           .from('budgets')
@@ -143,6 +146,7 @@ export default function DashboardPage() {
   }, [router]);
 
   const canViewSystemScope = currentRole === UserRole.JEFATURA || currentRole === UserRole.COMISION_DIRECTIVA || currentRole === UserRole.ADMIN;
+  const canViewExecutiveStats = currentRole === UserRole.JEFATURA || currentRole === UserRole.COMISION_DIRECTIVA;
 
   const visibleTickets = useMemo(() => {
     if (scope === 'mine' && currentUserId) {
@@ -208,6 +212,29 @@ export default function DashboardPage() {
       .reduce((sum, budget) => sum + (budget.disbursed_amount ?? budget.assigned_amount), 0);
   }, [scope, budgetTotals.totalDisbursed, visibleBudgets]);
 
+  const statsWindowStart = useMemo(() => {
+    const now = new Date();
+    if (statsPeriod === 'weekly') {
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+    }
+
+    if (statsPeriod === 'monthly') {
+      return new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+    }
+
+    return new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  }, [statsPeriod]);
+
+  const periodTickets = useMemo(
+    () => visibleTickets.filter((ticket) => new Date(ticket.request_date) >= statsWindowStart),
+    [visibleTickets, statsWindowStart]
+  );
+
+  const periodPending = useMemo(() => periodTickets.filter((ticket) => isPendingReviewStatus(ticket.status)).length, [periodTickets]);
+  const periodInCourse = useMemo(() => periodTickets.filter((ticket) => isInCourseStatus(ticket.status)).length, [periodTickets]);
+  const periodCompleted = useMemo(() => periodTickets.filter((ticket) => ticket.status === 'COMPLETADO').length, [periodTickets]);
+  const periodDenied = useMemo(() => periodTickets.filter((ticket) => ticket.status === 'RECHAZADO').length, [periodTickets]);
+
   return (
     <div className="space-y-8">
       <div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-[linear-gradient(135deg,rgba(127,29,29,0.96)_0%,rgba(180,35,24,0.94)_55%,rgba(249,115,22,0.92)_100%)] p-8 text-white shadow-[0_24px_60px_rgba(76,29,20,0.16)]">
@@ -270,6 +297,49 @@ export default function DashboardPage() {
               <SummaryCard title="Totales" value={pendingTickets.length + inCourseTickets.length + completedTickets.length + deniedTickets.length} description="Suma de todos los estados visibles." icon={<Ticket className="h-6 w-6 text-[#7f1d1d]" />} accent="bg-[#fce7e4]" />
             </div>
           </section>
+
+          {canViewExecutiveStats ? (
+            <section className="space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold text-[#1f120f]">Estadísticas ejecutivas</h2>
+                  <p className="text-sm text-slate-600">Lectura por período para seguimiento institucional.</p>
+                </div>
+                <div className="rounded-2xl border border-[#ead7cc] bg-white p-1">
+                  <div className="flex flex-wrap gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setStatsPeriod('weekly')}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${statsPeriod === 'weekly' ? 'bg-[#7f1d1d] text-white' : 'text-[#7f1d1d] hover:bg-[#fce7e4]'}`}
+                    >
+                      Semanal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatsPeriod('monthly')}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${statsPeriod === 'monthly' ? 'bg-[#7f1d1d] text-white' : 'text-[#7f1d1d] hover:bg-[#fce7e4]'}`}
+                    >
+                      Mensual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatsPeriod('yearly')}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${statsPeriod === 'yearly' ? 'bg-[#7f1d1d] text-white' : 'text-[#7f1d1d] hover:bg-[#fce7e4]'}`}
+                    >
+                      Anual
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <SummaryCard title="Total período" value={periodTickets.length} description="Tickets creados en la ventana seleccionada." icon={<TrendingUp className="h-6 w-6 text-[#7f1d1d]" />} accent="bg-[#fce7e4]" />
+                <SummaryCard title="Pendientes" value={periodPending} description="Aún sin resolución en el período." icon={<AlertCircle className="h-6 w-6 text-[#f97316]" />} accent="bg-[#fff4e5]" />
+                <SummaryCard title="En curso" value={periodInCourse} description="En gestión activa." icon={<Layers3 className="h-6 w-6 text-[#c2410c]" />} accent="bg-[#fff1e8]" />
+                <SummaryCard title="Completados" value={periodCompleted} description="Cerrados con desembolso." icon={<CheckCircle2 className="h-6 w-6 text-[#16a34a]" />} accent="bg-[#ecfdf3]" />
+                <SummaryCard title="Denegados" value={periodDenied} description="No aprobados dentro del período." icon={<AlertCircle className="h-6 w-6 text-[#b42318]" />} accent="bg-[#fdecec]" />
+              </div>
+            </section>
+          ) : null}
 
           <section className="space-y-4">
             <div className="flex items-center justify-between gap-3">
