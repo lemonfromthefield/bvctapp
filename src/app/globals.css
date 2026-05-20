@@ -45,3 +45,23 @@ body {
   background: rgba(180, 35, 24, 0.18);
   color: #1f120f;
 }
+
+@keyframes priorityUrgentPulse {
+  0%,
+  86%,
+  100% {
+    box-shadow: 0 18px 40px rgba(76, 29, 20, 0.18);
+  }
+
+  92%,
+  96% {
+    box-shadow:
+      0 0 0 4px rgba(255, 255, 255, 0.2),
+      0 0 0 10px rgba(239, 68, 68, 0.28),
+      0 18px 40px rgba(76, 29, 20, 0.28);
+  }
+}
+
+.priority-urgent-pulse {
+  animation: priorityUrgentPulse 30s ease-in-out infinite;
+}

@@ -10,7 +10,7 @@ import { ModuleFoldSection } from '@/components/ui/module-fold-section';
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
 import { supabaseClient } from '@/lib/supabase/client';
 import { fetchBudgetTotals, formatCurrency, type BudgetTotals } from '@/lib/utils/budget-utils';
-import { getTicketPriorityBadgeVariant } from '@/lib/utils/ticket-display';
+import { getTicketPriorityBadgeVariant, getTicketPriorityCardStyles } from '@/lib/utils/ticket-display';
 import { parseTicketPriority } from '@/lib/utils/priority-utils';
 import { UserRole } from '@/types/roles';
 import { PRIORITY_RULES, TicketPriority } from '@/types/tickets';
@@ -478,17 +478,20 @@ export default function PrioritiesPage() {
         </div>
         <div className="grid gap-4 xl:grid-cols-2">
           {groupedTickets.map(({ priority, tickets: priorityTickets }) => (
-            <div key={priority} className="rounded-3xl border border-[#f1d5c6] bg-[linear-gradient(180deg,#fffefe_0%,#fff7f1_100%)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
-              <div className="flex items-center justify-between gap-3 border-b border-[#ecd9cf] pb-3">
-                <h3 className="text-lg font-semibold text-[#1f120f]">{PRIORITY_RULES[priority].displayName}</h3>
+            <div
+              key={priority}
+              className={`rounded-3xl border p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl ${getTicketPriorityCardStyles(priority).container}`}
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-black/10 pb-3">
+                <h3 className={`text-lg font-semibold ${getTicketPriorityCardStyles(priority).title}`}>{PRIORITY_RULES[priority].displayName}</h3>
                 <Badge variant={getTicketPriorityBadgeVariant(priority)}>{priorityTickets.length}</Badge>
               </div>
               {priorityTickets.length === 0 ? (
-                <p className="mt-3 text-sm text-slate-600">No hay tickets en esta categoria.</p>
+                <p className={`mt-3 text-sm ${getTicketPriorityCardStyles(priority).description}`}>No hay tickets en esta categoria.</p>
               ) : (
                 <div className="mt-3 space-y-2">
                   {priorityTickets.slice(0, expandedPriorityByKey[priority] ? priorityTickets.length : 5).map((ticket) => (
-                    <div key={ticket.id} className="rounded-xl border border-[#f0ddd2] bg-white/80 px-3 py-2">
+                    <div key={ticket.id} className="rounded-xl border border-black/10 bg-white/90 px-3 py-2">
                       <TicketIdentityBlock
                         compact
                         ticketNumber={ticket.ticket_number}

@@ -1,7 +1,18 @@
 import { cn } from '@/lib/utils/cn';
 
 interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: 'default' | 'red' | 'orange' | 'yellow' | 'blue' | 'gray';
+  variant?:
+    | 'default'
+    | 'red'
+    | 'orange'
+    | 'yellow'
+    | 'blue'
+    | 'gray'
+    | 'priorityUrgent'
+    | 'priorityHigh'
+    | 'priorityMedium'
+    | 'priorityLow'
+    | 'priorityNone';
 }
 
 export function Badge({ className, variant = 'default', children, ...props }: BadgeProps) {
@@ -12,6 +23,11 @@ export function Badge({ className, variant = 'default', children, ...props }: Ba
     yellow: 'bg-yellow-100 text-yellow-900',
     blue: 'bg-blue-100 text-blue-900',
     gray: 'bg-gray-100 text-gray-900',
+    priorityUrgent: 'bg-[#b91c1c] text-white',
+    priorityHigh: 'bg-[#14532d] text-white',
+    priorityMedium: 'bg-[#15803d] text-white',
+    priorityLow: 'bg-[#bbf7d0] text-[#14532d]',
+    priorityNone: 'bg-[#dbeafe] text-[#1e3a8a]',
   };
 
   return (

@@ -23,6 +23,7 @@ export function ModuleFoldSection({
   emptyMessage,
 }: ModuleFoldSectionProps) {
   const hasItems = count > 0;
+  const headerTitle = status === 'pending' && !hasItems ? 'Estas al dia con las acciones' : title;
   const pendingStyles = hasItems
     ? 'border-[#f1b2b2] bg-[linear-gradient(180deg,#fff1f1_0%,#ffe4e4_100%)]'
     : 'border-[#b7e3c0] bg-[linear-gradient(180deg,#ecfdf1_0%,#dcfce7_100%)]';
@@ -36,10 +37,10 @@ export function ModuleFoldSection({
         className="flex w-full items-center justify-between gap-3 text-left"
       >
         <div>
-          <p className={`text-base font-semibold ${status === 'pending' ? pendingTextColor : 'text-[#1f120f]'}`}>{title}</p>
+          <p className={`text-base font-semibold ${status === 'pending' ? pendingTextColor : 'text-[#1f120f]'}`}>{headerTitle}</p>
           {status === 'pending' ? (
             <p className={`mt-1 text-xs ${hasItems ? 'text-[#9f3a3a]' : 'text-[#2f855a]'}`}>
-              {hasItems ? 'Hay nuevas acciones por realizar.' : 'No hay acciones pendientes.'}
+              {hasItems ? 'Hay nuevas acciones por realizar.' : 'Todo en orden por ahora.'}
             </p>
           ) : null}
         </div>

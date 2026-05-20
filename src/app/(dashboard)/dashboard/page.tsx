@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
 import { supabaseClient } from '@/lib/supabase/client';
 import { fetchBudgetTotals, formatCurrency, type BudgetTotals } from '@/lib/utils/budget-utils';
-import { getTicketPriorityLabel, getTicketPriorityBadgeVariant, isInCourseStatus, isPendingReviewStatus } from '@/lib/utils/ticket-display';
+import { getTicketPriorityLabel, getTicketPriorityCardStyles, isInCourseStatus, isPendingReviewStatus } from '@/lib/utils/ticket-display';
 import { parseTicketPriority } from '@/lib/utils/priority-utils';
 import { UserRole } from '@/types/roles';
 import { TicketPriority } from '@/types/tickets';
@@ -281,15 +281,18 @@ export default function DashboardPage() {
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
               {priorityCounts.map(({ priority, count }) => (
-                <div key={priority} className="rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
+                <div
+                  key={priority}
+                  className={`rounded-3xl border p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl ${getTicketPriorityCardStyles(priority).container}`}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-medium text-[#6b4b42]">{getTicketPriorityLabel(priority)}</p>
-                      <p className="mt-2 text-3xl font-bold tracking-tight text-[#1f120f]">{count}</p>
-                      <p className="mt-1 text-sm text-slate-600">Tickets en curso con esta prioridad.</p>
+                      <p className={`text-sm font-medium ${getTicketPriorityCardStyles(priority).title}`}>{getTicketPriorityLabel(priority)}</p>
+                      <p className={`mt-2 text-3xl font-bold tracking-tight ${getTicketPriorityCardStyles(priority).value}`}>{count}</p>
+                      <p className={`mt-1 text-sm ${getTicketPriorityCardStyles(priority).description}`}>Tickets en curso con esta prioridad.</p>
                     </div>
-                    <div className={`rounded-2xl p-3 ${getTicketPriorityBadgeVariant(priority) === 'red' ? 'bg-red-100' : getTicketPriorityBadgeVariant(priority) === 'orange' ? 'bg-orange-100' : getTicketPriorityBadgeVariant(priority) === 'yellow' ? 'bg-yellow-100' : getTicketPriorityBadgeVariant(priority) === 'blue' ? 'bg-blue-100' : 'bg-slate-100'}`}>
-                      <TrendingUp className="h-6 w-6 text-[#7f1d1d]" />
+                    <div className={`rounded-2xl p-3 ${getTicketPriorityCardStyles(priority).iconContainer}`}>
+                      <TrendingUp className={`h-6 w-6 ${getTicketPriorityCardStyles(priority).icon}`} />
                     </div>
                   </div>
                 </div>

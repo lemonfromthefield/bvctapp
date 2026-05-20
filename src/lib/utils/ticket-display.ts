@@ -44,18 +44,70 @@ export function getTicketStatusBadgeVariant(status: string): 'default' | 'red' |
   }
 }
 
-export function getTicketPriorityBadgeVariant(priority: TicketPriority): 'red' | 'orange' | 'yellow' | 'blue' | 'gray' {
+export function getTicketPriorityBadgeVariant(
+  priority: TicketPriority
+): 'priorityUrgent' | 'priorityHigh' | 'priorityMedium' | 'priorityLow' | 'priorityNone' {
   switch (priority) {
     case TicketPriority.URGENTE:
-      return 'red';
+      return 'priorityUrgent';
     case TicketPriority.ALTA_IMPORTANCIA:
-      return 'orange';
+      return 'priorityHigh';
     case TicketPriority.MEDIA_IMPORTANCIA:
-      return 'yellow';
+      return 'priorityMedium';
     case TicketPriority.BAJA_IMPORTANCIA:
-      return 'blue';
+      return 'priorityLow';
     default:
-      return 'gray';
+      return 'priorityNone';
+  }
+}
+
+export function getTicketPriorityCardStyles(priority: TicketPriority) {
+  switch (priority) {
+    case TicketPriority.URGENTE:
+      return {
+        container: 'border-[#7f1d1d] bg-[#b91c1c] text-white priority-urgent-pulse',
+        title: 'text-white/95',
+        value: 'text-white',
+        description: 'text-white/85',
+        iconContainer: 'bg-white/20',
+        icon: 'text-white',
+      };
+    case TicketPriority.ALTA_IMPORTANCIA:
+      return {
+        container: 'border-[#14532d] bg-[#14532d] text-white',
+        title: 'text-white/95',
+        value: 'text-white',
+        description: 'text-white/85',
+        iconContainer: 'bg-white/20',
+        icon: 'text-white',
+      };
+    case TicketPriority.MEDIA_IMPORTANCIA:
+      return {
+        container: 'border-[#15803d] bg-[#15803d] text-white',
+        title: 'text-white/95',
+        value: 'text-white',
+        description: 'text-white/85',
+        iconContainer: 'bg-white/20',
+        icon: 'text-white',
+      };
+    case TicketPriority.BAJA_IMPORTANCIA:
+      return {
+        container: 'border-[#4ade80] bg-[#dcfce7] text-[#14532d]',
+        title: 'text-[#14532d]',
+        value: 'text-[#14532d]',
+        description: 'text-[#166534]',
+        iconContainer: 'bg-[#86efac]',
+        icon: 'text-[#14532d]',
+      };
+    default:
+      return {
+        container: 'border-[#1d4ed8] bg-[#dbeafe] text-[#1e3a8a]',
+        title: 'text-[#1e3a8a]',
+        value: 'text-[#1e3a8a]',
+        description: 'text-[#1e40af]',
+        iconContainer: 'bg-[#93c5fd]',
+        icon: 'text-[#1e3a8a]',
+      };
   }
 }
 
