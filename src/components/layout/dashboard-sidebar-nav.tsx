@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Ticket, TrendingUp, Wallet, Settings, CircleHelp } from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
 import { UserRole } from '@/types/roles';
 
@@ -13,7 +14,12 @@ type NavItem = {
   icon: React.ReactNode;
 };
 
-export function DashboardSidebarNav() {
+type DashboardSidebarNavProps = {
+  className?: string;
+  onItemClick?: () => void;
+};
+
+export function DashboardSidebarNav({ className, onItemClick }: DashboardSidebarNavProps) {
   const pathname = usePathname();
   const [role, setRole] = useState<UserRole | null>(null);
 
@@ -48,7 +54,7 @@ export function DashboardSidebarNav() {
   }, [role]);
 
   return (
-    <nav className="flex-1 space-y-2 px-3 py-5">
+    <nav className={cn('flex-1 space-y-2 px-3 py-5', className)}>
       {navItems.map((item) => {
         const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`) === true;
 
@@ -56,6 +62,7 @@ export function DashboardSidebarNav() {
           <Link
             key={item.href}
             href={item.href}
+            onClick={onItemClick}
             className={`group flex items-center gap-3 rounded-2xl border px-4 py-3 transition-all ${
               isActive
                 ? 'border-white/30 bg-white/18 text-white'

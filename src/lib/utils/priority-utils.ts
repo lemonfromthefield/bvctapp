@@ -1,5 +1,20 @@
 import { TicketPriority, PRIORITY_RULES } from '@/types/tickets';
 
+export function parseTicketPriority(priority: string | null | undefined): TicketPriority {
+  if (!priority) {
+    return TicketPriority.SIN_PRIORIDAD;
+  }
+
+  const normalizedPriority = priority.trim().toUpperCase().replace(/\s+/g, '_');
+  return normalizedPriority in PRIORITY_RULES
+    ? (normalizedPriority as TicketPriority)
+    : TicketPriority.SIN_PRIORIDAD;
+}
+
+export function getPriorityDisplayName(priority: string | null | undefined): string {
+  return PRIORITY_RULES[parseTicketPriority(priority)].displayName;
+}
+
 /**
  * Get next priority in the escalation sequence
  * SIN_PRIORIDAD → BAJA_IMPORTANCIA → MEDIA_IMPORTANCIA → ALTA_IMPORTANCIA → URGENTE

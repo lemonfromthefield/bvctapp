@@ -1,10 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Paperclip, X } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FilePicker } from '@/components/ui/file-picker';
 import { Input } from '@/components/ui/input';
 import { supabaseClient } from '@/lib/supabase/client';
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
@@ -25,7 +26,6 @@ export default function NewTicketPage() {
   const [observations, setObservations] = useState('');
   const [suggestedPriority, setSuggestedPriority] = useState<TicketPriority>(TicketPriority.SIN_PRIORIDAD);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [areas, setAreas] = useState<Area[]>([]);
   const [loadingAreas, setLoadingAreas] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -89,20 +89,6 @@ export default function NewTicketPage() {
       day: '2-digit',
     });
   }, [expectedCoverageInDays]);
-
-  const handleFileSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const incoming = Array.from(event.target.files ?? []);
-    setSelectedFiles((prev) => {
-      const names = new Set(prev.map((f) => f.name));
-      return [...prev, ...incoming.filter((f) => !names.has(f.name))];
-    });
-    // reset input so the same file can be re-added after removing
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const removeFile = (index: number) => {
-    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
-  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -280,39 +266,15 @@ export default function NewTicketPage() {
             </div>
 
             <div className="space-y-2">
-              <span className="block text-sm font-medium text-slate-700">Adjuntar archivos <span className="font-normal text-slate-500">(opcional)</span></span>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex w-full items-center gap-3 rounded-2xl border-2 border-dashed border-[#d9c2b7] bg-[#fff9f5] px-4 py-4 text-sm text-[#7d5a4f] transition hover:border-[#b42318] hover:bg-[#fff1e8] hover:text-[#b42318]"
-              >
-                <Paperclip className="h-5 w-5 shrink-0" />
-                <span>Hacé clic para seleccionar archivos</span>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={handleFileSelection}
+              <FilePicker
+                label="Adjuntar archivos (opcional)"
+                description="Podés sumar fotos, presupuestos previos o documentación de respaldo desde el inicio del pedido."
+                files={selectedFiles}
+                onFilesChange={setSelectedFiles}
+                buttonText="Agregar archivos al ticket"
+                emptyStateText="Todavía no seleccionaste archivos para este ticket."
+                disabled={submitting}
               />
-              {selectedFiles.length > 0 ? (
-                <ul className="space-y-1.5">
-                  {selectedFiles.map((file, i) => (
-                    <li key={file.name} className="flex items-center justify-between rounded-xl border border-[#ead8cf] bg-white px-3 py-2 text-sm">
-                      <span className="truncate text-[#1f120f]">{file.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeFile(i)}
-                        className="ml-3 shrink-0 rounded-full p-0.5 text-[#9a3d12] hover:bg-[#fde7d8]"
-                        title="Quitar"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
             </div>
 
             <label className="space-y-1 text-sm text-slate-600">

@@ -5,10 +5,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { FilePicker } from '@/components/ui/file-picker';
 import { Input } from '@/components/ui/input';
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
 import { supabaseClient } from '@/lib/supabase/client';
 import { fetchBudgetTotals, formatCurrency, type BudgetTotals } from '@/lib/utils/budget-utils';
+import { parseTicketPriority } from '@/lib/utils/priority-utils';
 import { UserRole } from '@/types/roles';
 import { PRIORITY_RULES, TicketPriority } from '@/types/tickets';
 
@@ -133,7 +135,10 @@ export default function BudgetsPage() {
         setError(ticketsError.message);
       } else {
         const lookup = ((ticketsData ?? []) as TicketLookup[]).reduce<Record<string, TicketLookup>>((accumulator, ticket) => {
-          accumulator[ticket.id] = ticket;
+          accumulator[ticket.id] = {
+            ...ticket,
+            assigned_priority: parseTicketPriority(ticket.assigned_priority),
+          };
           return accumulator;
         }, {});
         setTicketById(lookup);
@@ -298,7 +303,7 @@ export default function BudgetsPage() {
           <h2 className="text-xl font-semibold text-[#1f120f]">Pendiente de resolver</h2>
           <Badge variant="yellow">{pendingDisbursementBudgets.length}</Badge>
         </div>
-        <p className="text-sm text-slate-600">Presupuestos ya asignados, pendientes de confirmación de pago efectivo.</p>
+        <p className="text-sm text-slate-600">Presupuestos ya asignados, pendientes de confirmación de pago efectivo y registro documental.</p>
 
         {loading ? (
           <p>Cargando asignaciones...</p>
@@ -336,7 +341,7 @@ export default function BudgetsPage() {
                   </summary>
 
                   {canEditBudgets ? (
-                    <div className="mt-4 grid gap-3 border-t border-[#ecd9cf] pt-4 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                    <div className="mt-4 grid gap-4 border-t border-[#ecd9cf] pt-4 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
                       <div className="space-y-2">
                         <Input
                           label="Monto desembolsado"
@@ -352,16 +357,19 @@ export default function BudgetsPage() {
                           }
                           placeholder={`Por defecto: ${budget.assigned_amount}`}
                         />
-                        <input
-                          type="file"
-                          multiple
-                          onChange={(event) =>
+                        <FilePicker
+                          label="Comprobantes o respaldos"
+                          description="Adjuntá recibos, constancias o cualquier documentación del desembolso."
+                          files={disbursementFilesByBudgetId[budget.id] ?? []}
+                          onFilesChange={(files) =>
                             setDisbursementFilesByBudgetId((current) => ({
                               ...current,
-                              [budget.id]: Array.from(event.target.files ?? []),
+                              [budget.id]: files,
                             }))
                           }
-                          className="w-full text-xs text-slate-600"
+                          buttonText="Agregar archivos del desembolso"
+                          emptyStateText="Todavía no cargaste comprobantes para este pago."
+                          disabled={confirmingDisbursementId === budget.id}
                         />
                       </div>
                       <div className="space-y-2">
@@ -378,7 +386,11 @@ export default function BudgetsPage() {
                           placeholder="Detalle del pago, proveedor, comprobante, etc."
                           className="w-full rounded-xl border border-[#d9c2b7] bg-white/90 px-3 py-2 text-sm text-[#1f120f] shadow-sm outline-none"
                         />
+                        <div className="rounded-2xl border border-[#f0ddd2] bg-[#fff8f3] px-4 py-3 text-xs text-[#7d5a4f]">
+                          El sistema confirmará el pago, cerrará el ticket y conservará estos adjuntos en su trazabilidad.
+                        </div>
                         <Button
+                          className="w-full sm:w-auto"
                           onClick={() => confirmDisbursement(budget)}
                           isLoading={confirmingDisbursementId === budget.id}
                           disabled={confirmingDisbursementId === budget.id}

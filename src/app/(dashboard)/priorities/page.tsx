@@ -4,9 +4,11 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { FilePicker } from '@/components/ui/file-picker';
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
 import { supabaseClient } from '@/lib/supabase/client';
 import { fetchBudgetTotals, formatCurrency, type BudgetTotals } from '@/lib/utils/budget-utils';
+import { parseTicketPriority } from '@/lib/utils/priority-utils';
 import { UserRole } from '@/types/roles';
 import { PRIORITY_RULES, TicketPriority } from '@/types/tickets';
 
@@ -126,7 +128,7 @@ export default function PrioritiesPage() {
         ticket_number: ticket.ticket_number ?? 0,
         concept: ticket.concept ?? '',
         status: ticket.status ?? '',
-        assigned_priority: (ticket.assigned_priority as TicketPriority | undefined) ?? TicketPriority.SIN_PRIORIDAD,
+        assigned_priority: parseTicketPriority(ticket.assigned_priority as string | undefined),
         request_date: ticket.request_date ?? new Date().toISOString(),
         budget_assigned_amount: canCurrentUserViewBudgetAssignments ? (ticket.budget_assigned_amount ?? null) : null,
         budget_status: canCurrentUserViewBudgetAssignments ? (ticket.budget_status ?? null) : null,
@@ -192,28 +194,16 @@ export default function PrioritiesPage() {
     setUpdatingId(ticket.id);
     setError(null);
 
-    const { error: updateError } = await supabaseClient
-      .from('tickets')
-      .update({
-        assigned_priority: newPriority,
-        priority_assigned_by: currentUserId,
-        priority_assigned_date: new Date().toISOString(),
-      })
-      .eq('id', ticket.id);
+    const { error: updateError } = await supabaseClient.rpc('assign_ticket_priority', {
+      p_ticket_id: ticket.id,
+      p_priority: newPriority,
+      p_notes: null,
+    });
 
     if (updateError) {
       setError(updateError.message);
     } else {
-      setTickets((current) =>
-        current.map((currentTicket) =>
-          currentTicket.id === ticket.id
-            ? {
-                ...currentTicket,
-                assigned_priority: newPriority,
-              }
-            : currentTicket
-        )
-      );
+      await loadData();
     }
 
     setUpdatingId(null);
@@ -360,13 +350,13 @@ export default function PrioritiesPage() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant={getPriorityBadgeVariant(ticket.assigned_priority)}>{PRIORITY_RULES[ticket.assigned_priority].displayName}</Badge>
-                      <Badge variant={getStatusBadgeVariant(ticket.status)}>{ticket.status}</Badge>
+                      <Badge variant={getStatusBadgeVariant(ticket.status)}>{ticket.status.replace(/_/g, ' ')}</Badge>
                       <span className="rounded-full border border-[#d7bfb0] bg-white px-3 py-1 text-xs font-semibold text-[#7d5a4f] transition group-open:bg-[#fde7d8]">Ver panel</span>
                     </div>
                   </div>
                 </summary>
 
-                <div className="mt-4 grid gap-4 border-t border-[#ecd9cf] pt-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.2fr)]">
+                <div className="mt-4 grid gap-4 border-t border-[#ecd9cf] pt-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.3fr)]">
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <Link href={`/tickets/${ticket.id}`} className="text-xs font-semibold text-[#9a3d12] underline-offset-2 hover:underline">Ver detalle del ticket</Link>
@@ -430,11 +420,13 @@ export default function PrioritiesPage() {
                           className="w-full rounded-xl border border-[#d9c2b7] bg-white/90 px-3 py-2 text-sm text-[#1f120f] placeholder:text-[#8f6a60] shadow-sm outline-none"
                           disabled={budgetSubmittingId === ticket.id}
                         />
-                        <input
-                          type="file"
-                          multiple
-                          onChange={(event) => setBudgetFilesById((current) => ({ ...current, [ticket.id]: Array.from(event.target.files ?? []) }))}
-                          className="w-full text-xs text-slate-600"
+                        <FilePicker
+                          label="Respaldos del presupuesto"
+                          description="Adjuntá cotizaciones, autorizaciones o documentación de soporte."
+                          files={budgetFilesById[ticket.id] ?? []}
+                          onFilesChange={(files) => setBudgetFilesById((current) => ({ ...current, [ticket.id]: files }))}
+                          buttonText="Agregar archivos del presupuesto"
+                          emptyStateText="Todavía no agregaste respaldos para esta asignación."
                           disabled={budgetSubmittingId === ticket.id}
                         />
                         <Button className="w-full" disabled={budgetSubmittingId === ticket.id} onClick={() => assignBudget(ticket)}>

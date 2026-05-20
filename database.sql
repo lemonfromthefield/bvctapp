@@ -579,9 +579,6 @@ ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
 
--- ============================================
--- HELPER: role lookup without RLS recursion
--- ============================================
 
 CREATE OR REPLACE FUNCTION public.get_my_role()
 RETURNS TEXT
@@ -591,6 +588,8 @@ STABLE
 AS $$
   SELECT role FROM profiles WHERE user_id = auth.uid();
 $$;
+
+DROP FUNCTION IF EXISTS public.get_budget_totals();
 
 CREATE OR REPLACE FUNCTION public.get_budget_totals()
 RETURNS TABLE(total_income NUMERIC, total_budgeted NUMERIC, total_disbursed NUMERIC, total_available NUMERIC)
@@ -651,6 +650,79 @@ BEGIN
     COALESCE(NULLIF(BTRIM(COALESCE(p_concept, '')), ''), 'Carga de fondos disponibles'),
     auth.uid()
   );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.assign_ticket_priority(
+  p_ticket_id UUID,
+  p_priority TEXT,
+  p_notes TEXT DEFAULT NULL
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  ticket_record RECORD;
+  normalized_priority TEXT;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Debes iniciar sesión para asignar prioridades';
+  END IF;
+
+  IF public.get_my_role() NOT IN ('JEFATURA', 'ADMIN') THEN
+    RAISE EXCEPTION 'Solo Jefatura o Admin pueden asignar prioridades';
+  END IF;
+
+  normalized_priority := UPPER(REPLACE(BTRIM(COALESCE(p_priority, '')), ' ', '_'));
+
+  IF normalized_priority = '' THEN
+    RAISE EXCEPTION 'Debes indicar una prioridad válida';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM unnest(enum_range(NULL::ticket_priority_enum)) AS allowed_priority
+    WHERE allowed_priority::TEXT = normalized_priority
+  ) THEN
+    RAISE EXCEPTION 'La prioridad indicada no es válida';
+  END IF;
+
+  SELECT id, status, assigned_priority
+  INTO ticket_record
+  FROM tickets
+  WHERE id = p_ticket_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'No se encontró el ticket solicitado';
+  END IF;
+
+  IF ticket_record.status NOT IN ('BORRADOR', 'PENDIENTE', 'ACEPTADO', 'PRESUPUESTADO', 'EN_PROCESO') THEN
+    RAISE EXCEPTION 'Solo se puede asignar prioridad a tickets activos';
+  END IF;
+
+  UPDATE tickets
+  SET assigned_priority = normalized_priority::ticket_priority_enum,
+      priority_assigned_by = auth.uid(),
+      priority_assigned_date = now(),
+      updated_at = now(),
+      version = version + 1
+  WHERE id = p_ticket_id;
+
+  IF NULLIF(BTRIM(COALESCE(p_notes, '')), '') IS NOT NULL THEN
+    INSERT INTO ticket_history (ticket_id, user_id, action, field_changed, old_value, new_value, timestamp)
+    VALUES (
+      p_ticket_id,
+      auth.uid(),
+      'PRIORITY_ASSIGNED',
+      'priority_note',
+      NULL,
+      NULLIF(BTRIM(COALESCE(p_notes, '')), ''),
+      now()
+    );
+  END IF;
 END;
 $$;
 
@@ -982,6 +1054,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_budget_totals() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.register_budget_funds(NUMERIC, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.assign_ticket_priority(UUID, TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.assign_budget_to_ticket(UUID, NUMERIC, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.unassign_budget_from_ticket(UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.confirm_budget_disbursement(UUID, NUMERIC, TEXT) TO authenticated;
