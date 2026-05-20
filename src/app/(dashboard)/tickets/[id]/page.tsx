@@ -409,7 +409,7 @@ export default function TicketDetailPage() {
                 <DataRow label="Presupuesto asignado" value={ticket.budget_assigned_amount != null ? `$${ticket.budget_assigned_amount.toLocaleString('es-AR')}` : undefined} pending={ticket.budget_assigned_amount == null} />
                 <DataRow label="Fecha de presupuesto" value={fmtDate(ticket.budget_assignment_date)} pending={!ticket.budget_assignment_date} />
                 <DataRow label="Estado presupuestario" value={ticket.budget_status ?? undefined} pending={!ticket.budget_status} />
-                <DataRow label="Fecha de desembolso" value={fmtDate(ticket.disbursement_date)} pending={!ticket.disbursement_date} />
+                <DataRow label="Fecha de abono" value={fmtDate(ticket.disbursement_date)} pending={!ticket.disbursement_date} />
               </>
             ) : (
               <div className="sm:col-span-2 rounded-2xl border border-[#ead8cf] bg-[#fff9f5] px-4 py-3 text-sm text-[#6b4b42]">

@@ -440,7 +440,7 @@ export default function PrioritiesPage() {
           <p className="mt-2 text-3xl font-bold text-[#1f120f]">{formatCurrency(budgetTotals.totalBudgeted)}</p>
         </div>
         <div className="rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
-          <p className="text-sm font-medium text-[#6b4b42]">Total desembolsado</p>
+          <p className="text-sm font-medium text-[#6b4b42]">Total abonado</p>
           <p className="mt-2 text-3xl font-bold text-[#1f120f]">{formatCurrency(budgetTotals.totalDisbursed)}</p>
         </div>
         <div className="rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">

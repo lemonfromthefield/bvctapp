@@ -18,7 +18,7 @@ export interface Budget {
 
 export enum BudgetStatus {
   ASIGNADO = 'ASIGNADO',
-  DESEMBOLSADO = 'DESEMBOLSADO',
+  ABONADO = 'ABONADO',
   COMPROBADO = 'COMPROBADO',
   CANCELADO = 'CANCELADO',
 }

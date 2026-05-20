@@ -20,7 +20,7 @@ type BudgetRow = {
   ticket_id: string;
   assigned_amount: number;
   disbursed_amount: number | null;
-  status: 'ASIGNADO' | 'DESEMBOLSADO' | 'COMPROBADO' | 'CANCELADO';
+  status: 'ASIGNADO' | 'ABONADO' | 'COMPROBADO' | 'CANCELADO';
   assigned_date: string;
 };
 
@@ -29,6 +29,7 @@ type TicketLookup = {
   ticket_number: number;
   concept: string;
   assigned_priority: TicketPriority;
+  import { BudgetHistoryDropdown } from '@/components/budgets/budget-history-dropdown';
   status: string;
   request_date: string;
 };
@@ -217,7 +218,7 @@ export default function BudgetsPage() {
     const amount = amountInput ? Number(amountInput) : budget.assigned_amount;
 
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError('El monto de desembolso debe ser válido y mayor a cero.');
+      setError('El monto de abono debe ser válido y mayor a cero.');
       return;
     }
 
@@ -243,7 +244,7 @@ export default function BudgetsPage() {
     setDisbursementAmountByBudgetId((current) => ({ ...current, [budget.id]: '' }));
     setDisbursementNotesByBudgetId((current) => ({ ...current, [budget.id]: '' }));
     setDisbursementFilesByBudgetId((current) => ({ ...current, [budget.id]: [] }));
-    setSuccessMessage('Desembolso confirmado. El ticket quedó cerrado como completado.');
+    setSuccessMessage('Abono confirmado. El ticket quedó cerrado como completado.');
     setConfirmingDisbursementId(null);
   };
 
@@ -268,7 +269,7 @@ export default function BudgetsPage() {
     }
 
     await loadData();
-    setSuccessMessage('Desembolso revertido. El ticket volvió a etapa presupuestaria.');
+    setSuccessMessage('Abono revertido. El ticket volvió a etapa presupuestaria.');
     setRevertingDisbursementId(null);
   };
 
@@ -276,12 +277,12 @@ export default function BudgetsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Presupuestos</h1>
-        <p className="mt-1 text-slate-600">Asignación ya realizada en prioridades y confirmación de desembolsos desde este módulo.</p>
+        <p className="mt-1 text-slate-600">Asignación ya realizada en prioridades y confirmación de abonos desde este módulo.</p>
       </div>
 
       <div className="rounded-3xl border border-white/70 bg-[var(--surface)] p-4 text-sm text-slate-700 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
         {canEditBudgets
-          ? 'Comisión/Admin cargan disponibilidad y confirman o revierten desembolsos.'
+          ? 'Comisión/Admin cargan disponibilidad y confirman o revierten abonos.'
           : 'Jefatura puede visualizar estado financiero y pagos confirmados.'}
       </div>
 
@@ -297,7 +298,7 @@ export default function BudgetsPage() {
         status="pending"
         isOpen={pendingSectionOpen}
         onToggle={() => setPendingSectionOpen((current) => !current)}
-        emptyMessage="No hay presupuestos pendientes de desembolso."
+        emptyMessage="No hay presupuestos pendientes de abono."
       >
         <p className="text-sm text-slate-600">Presupuestos ya asignados, pendientes de confirmación de pago efectivo y registro documental.</p>
 
@@ -337,7 +338,7 @@ export default function BudgetsPage() {
                     <div className="mt-4 grid gap-4 border-t border-[#ecd9cf] pt-4 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
                       <div className="space-y-2">
                         <Input
-                          label="Monto desembolsado"
+                          label="Monto abonado"
                           type="number"
                           min="0"
                           step="1"
@@ -352,7 +353,7 @@ export default function BudgetsPage() {
                         />
                         <FilePicker
                           label="Comprobantes o respaldos"
-                          description="Adjuntá recibos, constancias o cualquier documentación del desembolso."
+                          description="Adjuntá recibos, constancias o cualquier documentación del abono."
                           files={disbursementFilesByBudgetId[budget.id] ?? []}
                           onFilesChange={(files) =>
                             setDisbursementFilesByBudgetId((current) => ({
@@ -360,13 +361,13 @@ export default function BudgetsPage() {
                               [budget.id]: files,
                             }))
                           }
-                          buttonText="Agregar archivos del desembolso"
+                          buttonText="Agregar archivos del abono"
                           emptyStateText="Todavía no cargaste comprobantes para este pago."
                           disabled={confirmingDisbursementId === budget.id}
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-900">Observaciones del desembolso</label>
+                        <label className="block text-sm font-medium text-gray-900">Observaciones del abono</label>
                         <textarea
                           rows={3}
                           value={disbursementNotesByBudgetId[budget.id] ?? ''}
@@ -388,12 +389,12 @@ export default function BudgetsPage() {
                           isLoading={confirmingDisbursementId === budget.id}
                           disabled={confirmingDisbursementId === budget.id}
                         >
-                          Confirmar desembolso
+                          Confirmar abono
                         </Button>
                       </div>
                     </div>
                   ) : (
-                    <p className="mt-4 border-t border-[#ecd9cf] pt-4 text-xs text-slate-500">Solo Comisión/Admin puede confirmar desembolsos.</p>
+                    <p className="mt-4 border-t border-[#ecd9cf] pt-4 text-xs text-slate-500">Solo Comisión/Admin puede confirmar abonos.</p>
                   )}
                 </details>
               );
@@ -412,7 +413,7 @@ export default function BudgetsPage() {
           <p className="mt-2 text-3xl font-bold text-[#1f120f]">{formatCurrency(budgetTotals.totalBudgeted)}</p>
         </div>
         <div className="rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
-          <p className="text-sm font-medium text-[#6b4b42]">Total desembolsado</p>
+          <p className="text-sm font-medium text-[#6b4b42]">Total abonado</p>
           <p className="mt-2 text-3xl font-bold text-[#1f120f]">{formatCurrency(budgetTotals.totalDisbursed)}</p>
           <p className="mt-1 text-sm text-slate-600">Pagos confirmados y ya abonados.</p>
         </div>
@@ -466,9 +467,9 @@ export default function BudgetsPage() {
         status="done"
         isOpen={determinedSectionOpen}
         onToggle={() => setDeterminedSectionOpen((current) => !current)}
-        emptyMessage="No hay desembolsos confirmados todavía."
+        emptyMessage="No hay abonos confirmados todavía."
       >
-        <p className="mb-2 text-sm text-slate-600">Desembolsos confirmados o movimientos cerrados con trazabilidad completa.</p>
+        <p className="mb-2 text-sm text-slate-600">Abonos confirmados o movimientos cerrados con trazabilidad completa.</p>
         {loading ? (
           <p>Cargando asignaciones...</p>
         ) : (
@@ -497,18 +498,18 @@ export default function BudgetsPage() {
                       <div className="flex flex-col gap-1 text-sm text-slate-700 xl:items-end">
                         <p className="font-semibold text-[#1f120f]">{formatCurrency(budget.assigned_amount)}</p>
                         <p>Asignado el {new Date(budget.assigned_date).toLocaleDateString('es-AR')}</p>
-                        {budget.disbursed_amount != null ? <p>Desembolsado: {formatCurrency(budget.disbursed_amount)}</p> : null}
+                        {budget.disbursed_amount != null ? <p>Abonado: {formatCurrency(budget.disbursed_amount)}</p> : null}
                       </div>
                     </div>
 
-                    {canEditBudgets && (budget.status === 'DESEMBOLSADO' || budget.status === 'COMPROBADO') ? (
+                    {canEditBudgets && (budget.status === 'ABONADO' || budget.status === 'COMPROBADO') ? (
                       <div>
                         <Button
                           variant="outline"
                           disabled={revertingDisbursementId === budget.id}
                           onClick={() => revertDisbursement(budget)}
                         >
-                          {revertingDisbursementId === budget.id ? 'Revirtiendo...' : 'Revertir desembolso'}
+                          {revertingDisbursementId === budget.id ? 'Revirtiendo...' : 'Revertir abono'}
                         </Button>
                       </div>
                     ) : null}

@@ -26,7 +26,7 @@ type DashboardBudgetRow = {
   ticket_id: string;
   assigned_amount: number;
   disbursed_amount: number | null;
-  status: 'ASIGNADO' | 'DESEMBOLSADO' | 'COMPROBADO' | 'CANCELADO';
+  status: 'ASIGNADO' | 'ABONADO' | 'COMPROBADO' | 'CANCELADO';
 };
 
 type ScopeFilter = 'all' | 'mine';
@@ -188,7 +188,7 @@ export default function DashboardPage() {
   );
 
   const disbursedCount = useMemo(
-    () => completedTickets.filter((ticket) => ticket.budget_status === 'DESEMBOLSADO' || ticket.budget_status === 'COMPROBADO' || ticket.budget_assigned_amount != null).length,
+    () => completedTickets.filter((ticket) => ticket.budget_status === 'ABONADO' || ticket.budget_status === 'COMPROBADO' || ticket.budget_assigned_amount != null).length,
     [completedTickets]
   );
 
@@ -208,7 +208,7 @@ export default function DashboardPage() {
     }
 
     return visibleBudgets
-      .filter((budget) => budget.status === 'DESEMBOLSADO' || budget.status === 'COMPROBADO')
+      .filter((budget) => budget.status === 'ABONADO' || budget.status === 'COMPROBADO')
       .reduce((sum, budget) => sum + (budget.disbursed_amount ?? budget.assigned_amount), 0);
   }, [scope, budgetTotals.totalDisbursed, visibleBudgets]);
 
@@ -292,7 +292,7 @@ export default function DashboardPage() {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
               <SummaryCard title="Pendientes" value={pendingTickets.length} description="Faltan aceptar o denegar." icon={<AlertCircle className="h-6 w-6 text-[#f97316]" />} accent="bg-[#fff4e5]" />
               <SummaryCard title="En curso" value={inCourseTickets.length} description="Tickets aceptados en gestión." icon={<Layers3 className="h-6 w-6 text-[#c2410c]" />} accent="bg-[#fff1e8]" />
-              <SummaryCard title="Completados" value={completedTickets.length} description="Finalizados con desembolso." icon={<CheckCircle2 className="h-6 w-6 text-[#16a34a]" />} accent="bg-[#ecfdf3]" />
+              <SummaryCard title="Completados" value={completedTickets.length} description="Finalizados con abono." icon={<CheckCircle2 className="h-6 w-6 text-[#16a34a]" />} accent="bg-[#ecfdf3]" />
               <SummaryCard title="Denegados" value={deniedTickets.length} description="No aceptados originalmente." icon={<AlertCircle className="h-6 w-6 text-[#b42318]" />} accent="bg-[#fdecec]" />
               <SummaryCard title="Totales" value={pendingTickets.length + inCourseTickets.length + completedTickets.length + deniedTickets.length} description="Suma de todos los estados visibles." icon={<Ticket className="h-6 w-6 text-[#7f1d1d]" />} accent="bg-[#fce7e4]" />
             </div>
@@ -335,7 +335,7 @@ export default function DashboardPage() {
                 <SummaryCard title="Total período" value={periodTickets.length} description="Tickets creados en la ventana seleccionada." icon={<TrendingUp className="h-6 w-6 text-[#7f1d1d]" />} accent="bg-[#fce7e4]" />
                 <SummaryCard title="Pendientes" value={periodPending} description="Aún sin resolución en el período." icon={<AlertCircle className="h-6 w-6 text-[#f97316]" />} accent="bg-[#fff4e5]" />
                 <SummaryCard title="En curso" value={periodInCourse} description="En gestión activa." icon={<Layers3 className="h-6 w-6 text-[#c2410c]" />} accent="bg-[#fff1e8]" />
-                <SummaryCard title="Completados" value={periodCompleted} description="Cerrados con desembolso." icon={<CheckCircle2 className="h-6 w-6 text-[#16a34a]" />} accent="bg-[#ecfdf3]" />
+                <SummaryCard title="Completados" value={periodCompleted} description="Cerrados con abono." icon={<CheckCircle2 className="h-6 w-6 text-[#16a34a]" />} accent="bg-[#ecfdf3]" />
                 <SummaryCard title="Denegados" value={periodDenied} description="No aprobados dentro del período." icon={<AlertCircle className="h-6 w-6 text-[#b42318]" />} accent="bg-[#fdecec]" />
               </div>
             </section>
@@ -381,12 +381,12 @@ export default function DashboardPage() {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <SummaryCard title="Pendientes" value={pendingBudgetsCount} description="En curso sin presupuesto cargado." icon={<AlertCircle className="h-6 w-6 text-[#f97316]" />} accent="bg-[#fff4e5]" />
               <SummaryCard title="Presupuestados" value={budgetedCount} description="En curso con presupuesto asignado." icon={<Layers3 className="h-6 w-6 text-[#b42318]" />} accent="bg-[#fff1e8]" />
-              <SummaryCard title="Desembolsados" value={disbursedCount} description="Finalizados con desembolso registrado." icon={<CheckCircle2 className="h-6 w-6 text-[#16a34a]" />} accent="bg-[#ecfdf3]" />
+              <SummaryCard title="Abonados" value={disbursedCount} description="Finalizados con abono registrado." icon={<CheckCircle2 className="h-6 w-6 text-[#16a34a]" />} accent="bg-[#ecfdf3]" />
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <SummaryCard title={scope === 'mine' ? 'Disponible institucional' : 'Disponible'} value={formatCurrency(budgetTotals.totalAvailable)} description={scope === 'mine' ? 'Fondo general del sistema aun no asignado.' : 'Monto aun no comprometido en presupuestos.'} icon={<Wallet className="h-6 w-6 text-[#15803d]" />} accent="bg-[#ecfdf3]" />
               <SummaryCard title="Asignado" value={formatCurrency(assignedAmount)} description={scope === 'mine' ? 'Monto asignado a tickets visibles en tu filtro.' : 'Monto contemplado actualmente en presupuestos.'} icon={<CircleDollarSign className="h-6 w-6 text-[#c2410c]" />} accent="bg-[#fff1e8]" />
-              <SummaryCard title="Desembolsado" value={formatCurrency(disbursedAmount)} description={scope === 'mine' ? 'Monto desembolsado en tickets visibles en tu filtro.' : 'Monto efectivamente desembolsado.'} icon={<CircleDollarSign className="h-6 w-6 text-[#7f1d1d]" />} accent="bg-[#fdecec]" />
+              <SummaryCard title="Abonado" value={formatCurrency(disbursedAmount)} description={scope === 'mine' ? 'Monto abonado en tickets visibles en tu filtro.' : 'Monto efectivamente abonado.'} icon={<CircleDollarSign className="h-6 w-6 text-[#7f1d1d]" />} accent="bg-[#fdecec]" />
             </div>
           </section>
 

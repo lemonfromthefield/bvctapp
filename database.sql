@@ -39,7 +39,7 @@ CREATE TYPE ticket_priority_enum AS ENUM (
 
 CREATE TYPE budget_status_enum AS ENUM (
   'ASIGNADO',
-  'DESEMBOLSADO',
+  'ABONADO',
   'COMPROBADO',
   'CANCELADO'
 );
@@ -417,8 +417,8 @@ BEGIN
       PERFORM public.insert_notification(
         NEW.user_id,
         'TICKET_MODIFIED',
-        'Desembolso revertido',
-        'Se revirtió el desembolso de tu ticket y volvió a etapa presupuestaria',
+        'Abono revertido',
+        'Se revirtió el abono de tu ticket y volvió a etapa presupuestaria',
         NEW.id,
         jsonb_build_object('ticket_number', NEW.ticket_number)
       );
@@ -605,22 +605,23 @@ BEGIN
       COALESCE(SUM(CASE WHEN movement_type = 'EGRESO' THEN amount ELSE 0 END), 0)::NUMERIC AS total_expense
     FROM budget_movements
   ),
-  budgeted_totals AS (
+  -- Solo sumar asignados que NO están desembolsados/comprobados
+  assigned_only AS (
     SELECT COALESCE(SUM(assigned_amount), 0)::NUMERIC AS total_budgeted
     FROM budgets
     WHERE status = 'ASIGNADO'
   ),
-  disbursed_totals AS (
+  disbursed_only AS (
     SELECT COALESCE(SUM(COALESCE(disbursed_amount, assigned_amount)), 0)::NUMERIC AS total_disbursed
     FROM budgets
-    WHERE status IN ('DESEMBOLSADO', 'COMPROBADO')
+    WHERE status IN ('ABONADO', 'COMPROBADO')
   )
   SELECT
     movement_totals.total_income,
-    budgeted_totals.total_budgeted,
-    disbursed_totals.total_disbursed,
-    (movement_totals.total_income - movement_totals.total_expense - budgeted_totals.total_budgeted - disbursed_totals.total_disbursed)::NUMERIC AS total_available
-  FROM movement_totals, budgeted_totals, disbursed_totals;
+    assigned_only.total_budgeted,
+    disbursed_only.total_disbursed,
+    (movement_totals.total_income - movement_totals.total_expense - assigned_only.total_budgeted - disbursed_only.total_disbursed)::NUMERIC AS total_available
+  FROM movement_totals, assigned_only, disbursed_only;
 END;
 $$;
 
@@ -867,7 +868,7 @@ BEGIN
   END IF;
 
   IF budget_record.status <> 'ASIGNADO' THEN
-    RAISE EXCEPTION 'Solo se pueden revertir presupuestos aun no desembolsados';
+    RAISE EXCEPTION 'Solo se pueden revertir presupuestos aun no abonados';
   END IF;
 
   DELETE FROM budgets WHERE id = budget_record.id;
@@ -909,11 +910,11 @@ DECLARE
   final_amount NUMERIC;
 BEGIN
   IF auth.uid() IS NULL THEN
-    RAISE EXCEPTION 'Debes iniciar sesión para confirmar desembolsos';
+    RAISE EXCEPTION 'Debes iniciar sesión para confirmar abonos';
   END IF;
 
   IF public.get_my_role() NOT IN ('COMISION_DIRECTIVA', 'ADMIN') THEN
-    RAISE EXCEPTION 'Solo Comisión Directiva o Admin pueden confirmar desembolsos';
+    RAISE EXCEPTION 'Solo Comisión Directiva o Admin pueden confirmar abonos';
   END IF;
 
   SELECT *
@@ -927,17 +928,17 @@ BEGIN
   END IF;
 
   IF budget_record.status <> 'ASIGNADO' THEN
-    RAISE EXCEPTION 'Solo se puede desembolsar un presupuesto asignado';
+    RAISE EXCEPTION 'Solo se puede abonar un presupuesto asignado';
   END IF;
 
   final_amount := COALESCE(p_disbursed_amount, budget_record.assigned_amount);
 
   IF final_amount <= 0 THEN
-    RAISE EXCEPTION 'El monto desembolsado debe ser mayor a cero';
+    RAISE EXCEPTION 'El monto abonado debe ser mayor a cero';
   END IF;
 
   UPDATE budgets
-  SET status = 'DESEMBOLSADO',
+  SET status = 'ABONADO',
       disbursement_date = now(),
       disbursed_amount = final_amount,
       voucher_path = COALESCE(NULLIF(BTRIM(COALESCE(p_notes, '')), ''), voucher_path),
@@ -946,9 +947,9 @@ BEGIN
 
   UPDATE tickets
   SET status = 'COMPLETADO',
-      budget_status = 'DESEMBOLSADO',
+      budget_status = 'ABONADO',
       disbursement_date = now(),
-      final_status = 'DESEMBOLSADO',
+      final_status = 'ABONADO',
       updated_at = now(),
       version = version + 1
   WHERE id = budget_record.ticket_id;
@@ -993,11 +994,11 @@ DECLARE
   budget_record RECORD;
 BEGIN
   IF auth.uid() IS NULL THEN
-    RAISE EXCEPTION 'Debes iniciar sesión para revertir desembolsos';
+    RAISE EXCEPTION 'Debes iniciar sesión para revertir abonos';
   END IF;
 
   IF public.get_my_role() NOT IN ('COMISION_DIRECTIVA', 'ADMIN') THEN
-    RAISE EXCEPTION 'Solo Comisión Directiva o Admin pueden revertir desembolsos';
+    RAISE EXCEPTION 'Solo Comisión Directiva o Admin pueden revertir abonos';
   END IF;
 
   SELECT *
@@ -1010,8 +1011,8 @@ BEGIN
     RAISE EXCEPTION 'No se encontró el presupuesto';
   END IF;
 
-  IF budget_record.status NOT IN ('DESEMBOLSADO', 'COMPROBADO') THEN
-    RAISE EXCEPTION 'Solo se pueden revertir desembolsos confirmados';
+  IF budget_record.status NOT IN ('ABONADO', 'COMPROBADO') THEN
+    RAISE EXCEPTION 'Solo se pueden revertir abonos confirmados';
   END IF;
 
   UPDATE budgets
