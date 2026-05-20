@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { TicketIdentityBlock } from '@/components/tickets/ticket-identity-block';
 import { FilePicker } from '@/components/ui/file-picker';
 import { Input } from '@/components/ui/input';
 import { ModuleFoldSection } from '@/components/ui/module-fold-section';
@@ -13,7 +13,7 @@ import { supabaseClient } from '@/lib/supabase/client';
 import { fetchBudgetTotals, formatCurrency, type BudgetTotals } from '@/lib/utils/budget-utils';
 import { parseTicketPriority } from '@/lib/utils/priority-utils';
 import { UserRole } from '@/types/roles';
-import { PRIORITY_RULES, TicketPriority } from '@/types/tickets';
+import { TicketPriority } from '@/types/tickets';
 
 type BudgetRow = {
   id: string;
@@ -30,22 +30,8 @@ type TicketLookup = {
   concept: string;
   assigned_priority: TicketPriority;
   status: string;
+  request_date: string;
 };
-
-function getPriorityBadgeVariant(priority: TicketPriority): 'red' | 'orange' | 'yellow' | 'blue' | 'gray' {
-  switch (priority) {
-    case TicketPriority.URGENTE:
-      return 'red';
-    case TicketPriority.ALTA_IMPORTANCIA:
-      return 'orange';
-    case TicketPriority.MEDIA_IMPORTANCIA:
-      return 'yellow';
-    case TicketPriority.BAJA_IMPORTANCIA:
-      return 'blue';
-    default:
-      return 'gray';
-  }
-}
 
 export default function BudgetsPage() {
   const router = useRouter();
@@ -131,7 +117,7 @@ export default function BudgetsPage() {
     if (ticketIds.length > 0) {
       const { data: ticketsData, error: ticketsError } = await supabaseClient
         .from('tickets')
-        .select('id, ticket_number, concept, assigned_priority, status')
+        .select('id, ticket_number, concept, assigned_priority, status, request_date')
         .in('id', ticketIds);
 
       if (ticketsError) {
@@ -321,21 +307,20 @@ export default function BudgetsPage() {
               return (
                 <details key={budget.id} className="group rounded-2xl border border-[#ead8cf] bg-white/85 p-4">
                   <summary className="cursor-pointer list-none">
-                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                      <div>
-                        <p className="font-semibold text-[#1f120f]">
-                          {ticket ? `#${ticket.ticket_number} - ${ticket.concept}` : `Ticket ${budget.ticket_id}`}
-                        </p>
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                          {ticket ? (
-                            <Badge variant={getPriorityBadgeVariant(ticket.assigned_priority)}>
-                              {PRIORITY_RULES[ticket.assigned_priority]?.displayName ?? ticket.assigned_priority}
-                            </Badge>
-                          ) : null}
-                          <Badge variant="gray">Estado ticket: {ticket?.status ?? 'Sin dato'}</Badge>
-                          <Badge variant="gray">Presupuesto: {budget.status}</Badge>
-                        </div>
-                      </div>
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                      {ticket ? (
+                        <TicketIdentityBlock
+                          ticketNumber={ticket.ticket_number}
+                          concept={ticket.concept}
+                          status={ticket.status}
+                          assignedPriority={ticket.assigned_priority}
+                          requestDate={ticket.request_date}
+                          budgetStatus={budget.status}
+                          budgetAmount={budget.assigned_amount}
+                        />
+                      ) : (
+                        <p className="font-semibold text-[#1f120f]">Ticket {budget.ticket_id}</p>
+                      )}
 
                       <div className="flex items-center gap-3">
                         <p className="text-sm font-semibold text-[#1f120f]">{formatCurrency(budget.assigned_amount)}</p>
@@ -491,21 +476,20 @@ export default function BudgetsPage() {
               return (
                 <div key={budget.id} className="rounded-2xl border border-[#ead8cf] bg-white/80 p-4">
                   <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                      <div>
-                        <p className="font-semibold text-[#1f120f]">
-                          {ticket ? `#${ticket.ticket_number} - ${ticket.concept}` : `Ticket ${budget.ticket_id}`}
-                        </p>
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                          {ticket ? (
-                            <Badge variant={getPriorityBadgeVariant(ticket.assigned_priority)}>
-                              {PRIORITY_RULES[ticket.assigned_priority]?.displayName ?? ticket.assigned_priority}
-                            </Badge>
-                          ) : null}
-                          <Badge variant="gray">Estado ticket: {ticket?.status ?? 'Sin dato'}</Badge>
-                          <Badge variant="gray">Presupuesto: {budget.status}</Badge>
-                        </div>
-                      </div>
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                      {ticket ? (
+                        <TicketIdentityBlock
+                          ticketNumber={ticket.ticket_number}
+                          concept={ticket.concept}
+                          status={ticket.status}
+                          assignedPriority={ticket.assigned_priority}
+                          requestDate={ticket.request_date}
+                          budgetStatus={budget.status}
+                          budgetAmount={budget.disbursed_amount ?? budget.assigned_amount}
+                        />
+                      ) : (
+                        <p className="font-semibold text-[#1f120f]">Ticket {budget.ticket_id}</p>
+                      )}
 
                       <div className="flex flex-col gap-1 text-sm text-slate-700 xl:items-end">
                         <p className="font-semibold text-[#1f120f]">{formatCurrency(budget.assigned_amount)}</p>

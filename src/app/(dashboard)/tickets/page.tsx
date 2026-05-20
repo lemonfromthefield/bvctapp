@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { ModuleFoldSection } from '@/components/ui/module-fold-section';
+import { TicketIdentityBlock } from '@/components/tickets/ticket-identity-block';
 import { supabaseClient } from '@/lib/supabase/client';
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
+import { isPendingReviewStatus } from '@/lib/utils/ticket-display';
+import { parseTicketPriority } from '@/lib/utils/priority-utils';
 import { UserRole } from '@/types/roles';
-import { PRIORITY_RULES, TicketPriority } from '@/types/tickets';
+import { TicketPriority } from '@/types/tickets';
 
 type TicketSummary = {
   id: string;
@@ -20,6 +22,8 @@ type TicketSummary = {
   suggested_priority: TicketPriority;
   assigned_priority: string;
   request_date: string;
+  budget_assigned_amount: number | null;
+  budget_status: string | null;
 };
 
 type TicketMetrics = {
@@ -27,45 +31,6 @@ type TicketMetrics = {
   accepted: number;
   denied: number;
 };
-
-const REVIEWABLE_STATUSES = ['BORRADOR', 'PENDIENTE'] as const;
-const PENDING_STATUSES = ['BORRADOR', 'PENDIENTE'] as const;
-
-const STATUS_LABELS: Record<string, string> = {
-  BORRADOR: 'Pendiente',
-  PENDIENTE: 'Pendiente',
-  ACEPTADO: 'Aceptado',
-  RECHAZADO: 'Denegado',
-  PRESUPUESTADO: 'Presupuestado',
-  EN_PROCESO: 'En proceso',
-  COMPLETADO: 'Completado',
-  CANCELADO: 'Cancelado',
-};
-
-function isPendingStatus(status: string) {
-  return PENDING_STATUSES.includes(status as (typeof PENDING_STATUSES)[number]);
-}
-
-function isReviewableStatus(status: string) {
-  return REVIEWABLE_STATUSES.includes(status as (typeof REVIEWABLE_STATUSES)[number]);
-}
-
-function getStatusBadgeVariant(status: string): 'default' | 'red' | 'orange' | 'yellow' | 'blue' | 'gray' {
-  switch (status) {
-    case 'ACEPTADO':
-      return 'blue';
-    case 'RECHAZADO':
-      return 'red';
-    case 'PENDIENTE':
-      return 'yellow';
-    case 'EN_PROCESO':
-      return 'orange';
-    case 'COMPLETADO':
-      return 'default';
-    default:
-      return 'gray';
-  }
-}
 
 export default function TicketsPage() {
   const router = useRouter();
@@ -105,13 +70,13 @@ export default function TicketsPage() {
       const [ticketsResult, pendingResult, acceptedResult, deniedResult] = await Promise.all([
         supabaseClient
           .from('tickets')
-          .select('id, ticket_number, user_id, concept, status, suggested_priority, assigned_priority, request_date')
+          .select('id, ticket_number, user_id, concept, status, suggested_priority, assigned_priority, request_date, budget_assigned_amount, budget_status')
           .order('request_date', { ascending: false })
           ,
         supabaseClient
           .from('tickets')
           .select('id', { count: 'exact', head: true })
-          .in('status', [...PENDING_STATUSES]),
+          .in('status', ['BORRADOR', 'PENDIENTE']),
         supabaseClient
           .from('tickets')
           .select('id', { count: 'exact', head: true })
@@ -151,7 +116,7 @@ export default function TicketsPage() {
   }, [tickets, showOnlyMine, currentUserId]);
 
   const pendingTickets = useMemo(
-    () => visibleTickets.filter((ticket) => isReviewableStatus(ticket.status)),
+    () => visibleTickets.filter((ticket) => isPendingReviewStatus(ticket.status)),
     [visibleTickets]
   );
 
@@ -173,8 +138,8 @@ export default function TicketsPage() {
     currentRole === UserRole.ADMIN;
 
   const getPreviewPriority = (ticket: TicketSummary) => {
-    const assignedPriority = ticket.assigned_priority as TicketPriority;
-    const shouldUseSuggested = isReviewableStatus(ticket.status) && assignedPriority === TicketPriority.SIN_PRIORIDAD;
+    const assignedPriority = parseTicketPriority(ticket.assigned_priority);
+    const shouldUseSuggested = isPendingReviewStatus(ticket.status) && assignedPriority === TicketPriority.SIN_PRIORIDAD;
 
     return shouldUseSuggested ? ticket.suggested_priority : assignedPriority;
   };
@@ -226,7 +191,7 @@ export default function TicketsPage() {
     );
 
     setMetrics((current) => ({
-      pending: isPendingStatus(ticket.status) ? Math.max(current.pending - 1, 0) : current.pending,
+      pending: isPendingReviewStatus(ticket.status) ? Math.max(current.pending - 1, 0) : current.pending,
       accepted: action === 'accept' ? current.accepted + 1 : current.accepted,
       denied: action === 'reject' ? current.denied + 1 : current.denied,
     }));
@@ -289,20 +254,18 @@ export default function TicketsPage() {
         key={ticket.id}
         className="rounded-2xl border border-[#ead8cf] bg-[#fff9f5] p-4"
       >
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-semibold text-[#1f120f]">#{ticket.ticket_number} - {ticket.concept}</p>
-            <p className="text-xs text-slate-500">
-              Fecha: {new Date(ticket.request_date).toLocaleString('es-AR')}
-            </p>
-          </div>
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+          <TicketIdentityBlock
+            ticketNumber={ticket.ticket_number}
+            concept={ticket.concept}
+            status={ticket.status}
+            assignedPriority={previewPriority}
+            requestDate={ticket.request_date}
+            budgetStatus={ticket.budget_status}
+            budgetAmount={ticket.budget_assigned_amount}
+          />
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={getStatusBadgeVariant(ticket.status)}>{STATUS_LABELS[ticket.status] ?? ticket.status}</Badge>
-            <Badge variant="gray">
-              Prioridad: {PRIORITY_RULES[previewPriority]?.displayName ?? previewPriority}
-            </Badge>
-
-            {allowReviewActions && canReviewTickets && isReviewableStatus(ticket.status) ? (
+            {allowReviewActions && canReviewTickets && isPendingReviewStatus(ticket.status) ? (
               <>
                 <Button
                   size="sm"

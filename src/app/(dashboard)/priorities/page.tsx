@@ -4,11 +4,13 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { TicketIdentityBlock } from '@/components/tickets/ticket-identity-block';
 import { FilePicker } from '@/components/ui/file-picker';
 import { ModuleFoldSection } from '@/components/ui/module-fold-section';
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
 import { supabaseClient } from '@/lib/supabase/client';
 import { fetchBudgetTotals, formatCurrency, type BudgetTotals } from '@/lib/utils/budget-utils';
+import { getTicketPriorityBadgeVariant } from '@/lib/utils/ticket-display';
 import { parseTicketPriority } from '@/lib/utils/priority-utils';
 import { UserRole } from '@/types/roles';
 import { PRIORITY_RULES, TicketPriority } from '@/types/tickets';
@@ -24,41 +26,9 @@ type PriorityTicket = {
   budget_status: string | null;
 };
 
-const PRIORITY_ORDER = Object.values(TicketPriority).sort(
-  (left, right) => PRIORITY_RULES[right].precedence - PRIORITY_RULES[left].precedence
-);
+const PRIORITY_ORDER = Object.values(TicketPriority).sort((left, right) => PRIORITY_RULES[right].precedence - PRIORITY_RULES[left].precedence);
 
 const ACTIVE_STATUSES = ['ACEPTADO', 'PRESUPUESTADO', 'EN_PROCESO', 'COMPLETADO'] as const;
-
-function getPriorityBadgeVariant(priority: TicketPriority): 'red' | 'orange' | 'yellow' | 'blue' | 'gray' {
-  switch (priority) {
-    case TicketPriority.URGENTE:
-      return 'red';
-    case TicketPriority.ALTA_IMPORTANCIA:
-      return 'orange';
-    case TicketPriority.MEDIA_IMPORTANCIA:
-      return 'yellow';
-    case TicketPriority.BAJA_IMPORTANCIA:
-      return 'blue';
-    default:
-      return 'gray';
-  }
-}
-
-function getStatusBadgeVariant(status: string): 'default' | 'red' | 'orange' | 'yellow' | 'blue' | 'gray' {
-  switch (status) {
-    case 'ACEPTADO':
-      return 'blue';
-    case 'PRESUPUESTADO':
-      return 'orange';
-    case 'EN_PROCESO':
-      return 'yellow';
-    case 'COMPLETADO':
-      return 'default';
-    default:
-      return 'gray';
-  }
-}
 
 export default function PrioritiesPage() {
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
@@ -346,14 +316,17 @@ export default function PrioritiesPage() {
             {pendingResolutionTickets.map((ticket) => (
               <details key={ticket.id} className="group rounded-2xl border border-[#ead8cf] bg-[#fff9f5] p-4">
                 <summary className="cursor-pointer list-none">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-semibold text-[#1f120f]">#{ticket.ticket_number} - {ticket.concept}</p>
-                      <p className="mt-1 text-xs text-slate-500">Solicitado el {new Date(ticket.request_date).toLocaleDateString('es-AR')}</p>
-                    </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <TicketIdentityBlock
+                      ticketNumber={ticket.ticket_number}
+                      concept={ticket.concept}
+                      status={ticket.status}
+                      assignedPriority={ticket.assigned_priority}
+                      requestDate={ticket.request_date}
+                      budgetStatus={ticket.budget_status}
+                      budgetAmount={ticket.budget_assigned_amount}
+                    />
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={getPriorityBadgeVariant(ticket.assigned_priority)}>{PRIORITY_RULES[ticket.assigned_priority].displayName}</Badge>
-                      <Badge variant={getStatusBadgeVariant(ticket.status)}>{ticket.status.replace(/_/g, ' ')}</Badge>
                       <span className="rounded-full border border-[#d7bfb0] bg-white px-3 py-1 text-xs font-semibold text-[#7d5a4f] transition group-open:bg-[#fde7d8]">Ver panel</span>
                     </div>
                   </div>
@@ -478,10 +451,18 @@ export default function PrioritiesPage() {
         <div className="space-y-2">
           {determinedTickets.map((ticket) => (
             <div key={ticket.id} className="rounded-2xl border border-[#ead8cf] bg-[#fff9f5] p-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm font-semibold text-[#1f120f]">#{ticket.ticket_number} - {ticket.concept}</p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <TicketIdentityBlock
+                  compact
+                  ticketNumber={ticket.ticket_number}
+                  concept={ticket.concept}
+                  status={ticket.status}
+                  assignedPriority={ticket.assigned_priority}
+                  requestDate={ticket.request_date}
+                  budgetStatus={ticket.budget_status}
+                  budgetAmount={ticket.budget_assigned_amount}
+                />
                 <div className="flex items-center gap-2">
-                  <Badge variant={getStatusBadgeVariant(ticket.status)}>{ticket.status}</Badge>
                   <Link href={`/tickets/${ticket.id}`} className="text-xs font-semibold text-[#9a3d12] underline-offset-2 hover:underline">Ver ticket</Link>
                 </div>
               </div>
@@ -500,7 +481,7 @@ export default function PrioritiesPage() {
             <div key={priority} className="rounded-3xl border border-[#f1d5c6] bg-[linear-gradient(180deg,#fffefe_0%,#fff7f1_100%)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
               <div className="flex items-center justify-between gap-3 border-b border-[#ecd9cf] pb-3">
                 <h3 className="text-lg font-semibold text-[#1f120f]">{PRIORITY_RULES[priority].displayName}</h3>
-                <Badge variant={getPriorityBadgeVariant(priority)}>{priorityTickets.length}</Badge>
+                <Badge variant={getTicketPriorityBadgeVariant(priority)}>{priorityTickets.length}</Badge>
               </div>
               {priorityTickets.length === 0 ? (
                 <p className="mt-3 text-sm text-slate-600">No hay tickets en esta categoria.</p>
@@ -508,7 +489,16 @@ export default function PrioritiesPage() {
                 <div className="mt-3 space-y-2">
                   {priorityTickets.slice(0, expandedPriorityByKey[priority] ? priorityTickets.length : 5).map((ticket) => (
                     <div key={ticket.id} className="rounded-xl border border-[#f0ddd2] bg-white/80 px-3 py-2">
-                      <p className="text-sm text-slate-700">#{ticket.ticket_number} - {ticket.concept}</p>
+                      <TicketIdentityBlock
+                        compact
+                        ticketNumber={ticket.ticket_number}
+                        concept={ticket.concept}
+                        status={ticket.status}
+                        assignedPriority={ticket.assigned_priority}
+                        requestDate={ticket.request_date}
+                        budgetStatus={ticket.budget_status}
+                        budgetAmount={ticket.budget_assigned_amount}
+                      />
                     </div>
                   ))}
 
