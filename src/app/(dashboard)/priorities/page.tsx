@@ -37,6 +37,7 @@ export default function PrioritiesPage() {
   const [reorderingId, setReorderingId] = useState<string | null>(null);
   const [draggingTicketId, setDraggingTicketId] = useState<string | null>(null);
   const [dragOverTicketId, setDragOverTicketId] = useState<string | null>(null);
+  const [shifts, setShifts] = useState<Record<string, number>>({});
   const [selectedPriorityById, setSelectedPriorityById] = useState<Record<string, TicketPriority>>({});
   const [pendingSectionOpen, setPendingSectionOpen] = useState(true);
   const [determinedSectionOpen, setDeterminedSectionOpen] = useState(false);
@@ -250,11 +251,58 @@ export default function PrioritiesPage() {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', ticketId);
     setDraggingTicketId(ticketId);
+    setShifts({});
   };
 
   const handleDragOver = (event: DragEvent<HTMLElement>, ticketId: string) => {
     event.preventDefault();
     setDragOverTicketId(ticketId);
+
+    // Compute lightweight FLIP-like shifts for visible items in the same priority
+    const draggedId = draggingTicketId;
+    if (!draggedId) return;
+
+    const target = orderedTickets.find((t) => t.id === ticketId);
+    const dragged = orderedTickets.find((t) => t.id === draggedId);
+    if (!target || !dragged) return;
+
+    const samePriority = orderedTickets.filter((t) => t.assigned_priority === target.assigned_priority);
+    const draggedIndex = samePriority.findIndex((t) => t.id === draggedId);
+    const targetIndex = samePriority.findIndex((t) => t.id === ticketId);
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setShifts({});
+      return;
+    }
+
+    const getHeight = (id: string) => {
+      try {
+        const el = document.getElementById(`ticket-${id}`);
+        return el?.getBoundingClientRect().height ?? 64;
+      } catch {
+        return 64;
+      }
+    };
+
+    const referenceHeight = getHeight(ticketId) + 8;
+    const newShifts: Record<string, number> = {};
+
+    if (draggedIndex < targetIndex) {
+      // items between draggedIndex+1 .. targetIndex move up
+      samePriority.forEach((t, idx) => {
+        if (idx > draggedIndex && idx <= targetIndex) {
+          newShifts[t.id] = -referenceHeight;
+        }
+      });
+    } else if (draggedIndex > targetIndex) {
+      // items between targetIndex .. draggedIndex-1 move down
+      samePriority.forEach((t, idx) => {
+        if (idx >= targetIndex && idx < draggedIndex) {
+          newShifts[t.id] = referenceHeight;
+        }
+      });
+    }
+
+    setShifts(newShifts);
   };
 
   const handleDrop = async (
@@ -268,16 +316,19 @@ export default function PrioritiesPage() {
 
     if (!draggedId || draggedId === targetId) {
       setDraggingTicketId(null);
+      setShifts({});
       return;
     }
 
     await moveTicketWithinPriority(priority, draggedId, targetId);
     setDraggingTicketId(null);
+    setShifts({});
   };
 
   const handleDragEnd = () => {
     setDraggingTicketId(null);
     setDragOverTicketId(null);
+    setShifts({});
   };
 
   const updateTicketPriority = async (ticket: PriorityTicket) => {
@@ -483,12 +534,14 @@ export default function PrioritiesPage() {
             {pendingResolutionTickets.map((ticket) => (
               <details
                 key={ticket.id}
+                id={`ticket-${ticket.id}`}
                 draggable={canReorderPriorities}
                 onDragStart={(event) => handleDragStart(event, ticket.id)}
                 onDragOver={(event) => handleDragOver(event, ticket.id)}
                 onDrop={(event) => handleDrop(event, ticket.id, ticket.assigned_priority)}
                 onDragEnd={handleDragEnd}
-                className="group rounded-2xl border border-[#ead8cf] bg-[#fff9f5] p-4"
+                className={`group rounded-2xl border border-[#ead8cf] bg-[#fff9f5] p-4 ticket-transition ${draggingTicketId === ticket.id ? 'ticket-dragging' : ''} ${dragOverTicketId === ticket.id ? 'ticket-drag-placeholder' : ''}`}
+                style={{ willChange: 'transform, opacity', transform: `translateY(${shifts[ticket.id] ?? 0}px) ${draggingTicketId === ticket.id ? ' scale(1.02)' : ''}` }}
               >
                 <summary className="cursor-pointer list-none">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -616,15 +669,16 @@ export default function PrioritiesPage() {
                     {tickets.map((ticket) => (
                     <div
                       key={ticket.id}
+                      id={`ticket-${ticket.id}`}
                       draggable={canReorderPriorities}
                       onDragStart={(event) => handleDragStart(event, ticket.id)}
                       onDragOver={(event) => handleDragOver(event, ticket.id)}
                       onDrop={(event) => handleDrop(event, ticket.id, priority)}
                       onDragEnd={handleDragEnd}
-                      className={`rounded-2xl border border-[#ead8cf] bg-white px-3 py-3 transition-all duration-200 transform-gpu ${
-                        dragOverTicketId === ticket.id ? 'ring-2 ring-slate-300 bg-slate-50 scale-[1.01]' : ''
-                      } ${draggingTicketId === ticket.id ? 'opacity-70' : 'opacity-100'}`}
-                      style={{ willChange: 'transform, opacity' }}
+                      className={`rounded-2xl border border-[#ead8cf] bg-white px-3 py-3 ticket-transition ${
+                        dragOverTicketId === ticket.id ? 'ring-2 ring-slate-300 bg-slate-50' : ''
+                      } ${draggingTicketId === ticket.id ? 'ticket-dragging' : ''}`}
+                      style={{ willChange: 'transform, opacity', transform: `translateY(${shifts[ticket.id] ?? 0}px) ${draggingTicketId === ticket.id ? ' scale(1.02)' : ''}` }}
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <TicketIdentityBlock

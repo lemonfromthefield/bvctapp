@@ -65,3 +65,25 @@ body {
 .priority-urgent-pulse {
   animation: priorityUrgentPulse 30s ease-in-out infinite;
 }
+
+.priority-urgent-pulse {
+  animation: priorityUrgentPulse 30s ease-in-out infinite;
+}
+
+/* Ticket drag-and-drop helpers */
+.ticket-transition {
+  transition: transform 220ms cubic-bezier(.2,.8,.2,1), box-shadow 150ms ease, opacity 150ms ease;
+  will-change: transform, opacity;
+}
+
+.ticket-dragging {
+  transform: scale(1.02);
+  box-shadow: 0 12px 30px rgba(31,18,15,0.12);
+  z-index: 30;
+  opacity: 0.95;
+}
+
+.ticket-drag-placeholder {
+  outline: 2px dashed rgba(124,58,237,0.08);
+  background: rgba(249,115,22,0.02);
+}
