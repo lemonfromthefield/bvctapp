@@ -130,126 +130,152 @@ export default function TicketDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadingFile, setDownloadingFile] = useState<string | null>(null);
+  const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
+  const [selecting, setSelecting] = useState(false);
 
-  useEffect(() => {
+  const loadTicket = async () => {
     if (!id) return;
 
-    const load = async () => {
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      const [ticketResult, profileResult, historyResult, attachmentsResult] = await Promise.all([
-        supabaseClient
+    const [ticketResult, profileResult, historyResult, attachmentsResult, currentUser] = await Promise.all([
+      supabaseClient
+        .from('tickets')
+        .select(`
+          id, ticket_number, concept, quantity, observations,
+          status, suggested_priority, assigned_priority,
+          request_date, acceptance_date, rejection_date, rejection_reason,
+          priority_assigned_date, user_id,
+          areas ( name, code )
+        `)
+        .eq('id', id)
+        .single(),
+
+      // Fetch profile separately since it's not a direct relation
+      (async () => {
+        const ticketRes = await supabaseClient
           .from('tickets')
-          .select(`
-            id, ticket_number, concept, quantity, observations,
-            status, suggested_priority, assigned_priority,
-            request_date, acceptance_date, rejection_date, rejection_reason,
-            priority_assigned_date, user_id,
-            areas ( name, code )
-          `)
+          .select('user_id')
           .eq('id', id)
-          .single(),
-
-        // Fetch profile separately since it's not a direct relation
-        (async () => {
-          const ticketRes = await supabaseClient
-            .from('tickets')
-            .select('user_id')
-            .eq('id', id)
-            .single();
-          
-          if (ticketRes.error || !ticketRes.data) return { data: null, error: ticketRes.error };
-          
-          return supabaseClient
-            .from('profiles')
-            .select('full_name, role')
-            .eq('user_id', ticketRes.data.user_id)
-            .single();
-        })(),
-
-        supabaseClient
-          .from('ticket_history')
-          .select(`
-            id, action, field_changed, old_value, new_value, timestamp, user_id
-          `)
-          .eq('ticket_id', id)
-          .order('timestamp', { ascending: true }),
-
-        supabaseClient
-          .from('attachments')
-          .select('id, file_name, file_path, file_size, mime_type, created_at')
-          .eq('ticket_id', id)
-          .order('created_at', { ascending: true }),
-      ]);
-
-      if (ticketResult.error) {
-        setError(ticketResult.error.message);
-      } else {
-        const rawTicket = ticketResult.data as unknown as RawTicketDetail;
-
-        // Get profile from separate query result
-        const profileData = !profileResult.error && profileResult.data 
-          ? profileResult.data as { full_name: string; role: string }
-          : null;
-
-        setTicket({
-          ...rawTicket,
-          areas: firstOrNull(rawTicket.areas),
-          profiles: profileData,
-        });
-      }
-
-      if (!historyResult.error) {
-        const historyData = (historyResult.data ?? []) as Array<{
-          id: string;
-          action: string;
-          field_changed: string | null;
-          old_value: string | null;
-          new_value: string | null;
-          timestamp: string;
-          user_id: string;
-        }>;
-
-        // Get unique user IDs from history
-        const userIds = [...new Set(historyData.map(entry => entry.user_id))];
+          .single();
         
-        if (userIds.length > 0) {
-          // Fetch profiles for these users
-          const { data: profilesData, error: profilesError } = await supabaseClient
-            .from('profiles')
-            .select('user_id, full_name, role')
-            .in('user_id', userIds);
+        if (ticketRes.error || !ticketRes.data) return { data: null, error: ticketRes.error };
+        
+        return supabaseClient
+          .from('profiles')
+          .select('full_name, role')
+          .eq('user_id', ticketRes.data.user_id)
+          .single();
+      })(),
 
-          if (!profilesError && profilesData) {
-            // Create a map for quick lookup
-            const profileMap = new Map(
-              (profilesData as Array<{ user_id: string; full_name: string; role: string }>)
-                .map(p => [p.user_id, { full_name: p.full_name, role: p.role }])
-            );
+      supabaseClient
+        .from('ticket_history')
+        .select(`
+          id, action, field_changed, old_value, new_value, timestamp, user_id
+        `)
+        .eq('ticket_id', id)
+        .order('timestamp', { ascending: true }),
 
-            // Merge history with profiles
-            const normalizedHistory: HistoryRow[] = historyData.map(entry => ({
-              ...entry,
-              profiles: profileMap.get(entry.user_id) ?? null,
-            }));
-            setHistory(normalizedHistory);
-          } else {
-            setHistory(historyData.map(entry => ({ ...entry, profiles: null })));
-          }
+      supabaseClient
+        .from('attachments')
+        .select('id, file_name, file_path, file_size, mime_type, created_at')
+        .eq('ticket_id', id)
+        .order('created_at', { ascending: true }),
+
+      // current user
+      (async () => {
+        const { data } = await supabaseClient.auth.getUser();
+        return data?.user ?? null;
+      })(),
+    ]);
+
+    if (ticketResult.error) {
+      setError(ticketResult.error.message);
+    } else {
+      const rawTicket = ticketResult.data as unknown as RawTicketDetail;
+
+      // Get profile from separate query result
+      const profileData = !profileResult.error && profileResult.data 
+        ? profileResult.data as { full_name: string; role: string }
+        : null;
+
+      setTicket({
+        ...rawTicket,
+        areas: firstOrNull(rawTicket.areas),
+        profiles: profileData,
+      });
+    }
+
+    if (!historyResult.error) {
+      const historyData = (historyResult.data ?? []) as Array<{
+        id: string;
+        action: string;
+        field_changed: string | null;
+        old_value: string | null;
+        new_value: string | null;
+        timestamp: string;
+        user_id: string;
+      }>;
+
+      // Get unique user IDs from history
+      const userIds = [...new Set(historyData.map(entry => entry.user_id))];
+      
+      if (userIds.length > 0) {
+        // Fetch profiles for these users
+        const { data: profilesData, error: profilesError } = await supabaseClient
+          .from('profiles')
+          .select('user_id, full_name, role')
+          .in('user_id', userIds);
+
+        if (!profilesError && profilesData) {
+          // Create a map for quick lookup
+          const profileMap = new Map(
+            (profilesData as Array<{ user_id: string; full_name: string; role: string }>)
+              .map(p => [p.user_id, { full_name: p.full_name, role: p.role }])
+          );
+
+          // Merge history with profiles
+          const normalizedHistory: HistoryRow[] = historyData.map(entry => ({
+            ...entry,
+            profiles: profileMap.get(entry.user_id) ?? null,
+          }));
+          setHistory(normalizedHistory);
         } else {
-          setHistory([]);
+          setHistory(historyData.map(entry => ({ ...entry, profiles: null })));
         }
+      } else {
+        setHistory([]);
       }
+    }
 
-      if (!attachmentsResult.error) {
-        setAttachments((attachmentsResult.data ?? []) as AttachmentRow[]);
+    if (!attachmentsResult.error) {
+      setAttachments((attachmentsResult.data ?? []) as AttachmentRow[]);
+    }
+
+    // Set current role if we have a signed user
+    if (currentUser) {
+      try {
+        const { data: profileData, error: profileError } = await supabaseClient
+          .from('profiles')
+          .select('full_name, role, user_id')
+          .eq('user_id', currentUser.id)
+          .single();
+
+        if (!profileError && profileData) {
+          setCurrentRole(profileData.role as UserRole);
+        }
+      } catch {
+        // ignore
       }
+    }
 
-      setLoading(false);
-    };
+    setLoading(false);
+  };
 
-    load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    loadTicket();
   }, [id]);
 
   const handleDownload = async (attachment: AttachmentRow) => {
@@ -330,6 +356,35 @@ export default function TicketDetailPage() {
           Solicitado el {fmtDate(ticket.request_date, true)}
         </span>
       </div>
+
+      {/* ── Action buttons (select for Compras) ── */}
+      {(currentRole === 'COMISION_DIRECTIVA' || currentRole === 'ADMIN') && (
+        <div className="flex items-center gap-2">
+          {ticket.status !== 'EN_PROCESO' ? (
+            <Button disabled={selecting} onClick={async () => {
+              setSelecting(true);
+              setError(null);
+              const { error } = await supabaseClient.from('tickets').update({ status: 'EN_PROCESO' }).eq('id', ticket.id);
+              if (error) setError(error.message);
+              await loadTicket();
+              setSelecting(false);
+            }}>
+              {selecting ? 'Seleccionando...' : 'Seleccionar'}
+            </Button>
+          ) : (
+            <Button variant="destructive" disabled={selecting} onClick={async () => {
+              setSelecting(true);
+              setError(null);
+              const { error } = await supabaseClient.from('tickets').update({ status: 'PENDIENTE' }).eq('id', ticket.id);
+              if (error) setError(error.message);
+              await loadTicket();
+              setSelecting(false);
+            }}>
+              {selecting ? 'Quitando...' : 'Quitar de Compras'}
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* ── Main data ── */}
       <Card>
