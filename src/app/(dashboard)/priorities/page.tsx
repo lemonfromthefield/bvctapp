@@ -143,6 +143,42 @@ export default function PrioritiesPage() {
     })).filter((group) => group.tickets.length > 0);
   }, [selectedTickets]);
 
+  const reorderSelectedPriorityGroup = async (priority: TicketPriority) => {
+    const query = await supabaseClient
+      .from('tickets')
+      .select('id, order_number, request_date')
+      .eq('status', 'EN_PROCESO')
+      .eq('assigned_priority', priority)
+      .order('order_number', { ascending: true })
+      .order('request_date', { ascending: true });
+
+    if (query.error) {
+      setError(query.error.message);
+      return;
+    }
+
+    const priorityTickets = (query.data ?? []) as Array<{
+      id: string;
+      order_number: number;
+      request_date: string;
+    }>;
+
+    const results = await Promise.all(
+      priorityTickets.map((ticket, index) =>
+        supabaseClient
+          .from('tickets')
+          .update({ order_number: index + 1 })
+          .eq('id', ticket.id)
+          .select()
+      )
+    );
+
+    const failed = results.find((response) => response.error);
+    if (failed?.error) {
+      setError(failed.error.message);
+    }
+  };
+
   const pendingResolutionTickets = useMemo(
     () => orderedTickets.filter((ticket) => ticket.status !== 'COMPLETADO' && ticket.status !== 'EN_PROCESO'),
     [orderedTickets]
@@ -262,9 +298,26 @@ export default function PrioritiesPage() {
     setSelectingId(ticketId);
     setError(null);
 
+    const ticket = tickets.find((item) => item.id === ticketId);
+    const ticketPriority = ticket?.assigned_priority ?? TicketPriority.SIN_PRIORIDAD;
+
+    const countResult = await supabaseClient
+      .from('tickets')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'EN_PROCESO')
+      .eq('assigned_priority', ticketPriority);
+
+    if (countResult.error) {
+      setError(countResult.error.message);
+      setSelectingId(null);
+      return;
+    }
+
+    const existingPriorityCount = countResult.count ?? 0;
+
     const { data, error } = await supabaseClient
       .from('tickets')
-      .update({ status: 'EN_PROCESO' })
+      .update({ status: 'EN_PROCESO', order_number: existingPriorityCount + 1 })
       .eq('id', ticketId)
       .select();
 
@@ -289,6 +342,9 @@ export default function PrioritiesPage() {
     setSelectingId(ticketId);
     setError(null);
 
+    const ticket = tickets.find((item) => item.id === ticketId);
+    const ticketPriority = ticket?.assigned_priority ?? TicketPriority.SIN_PRIORIDAD;
+
     const { data, error } = await supabaseClient
       .from('tickets')
       .update({ status: 'PENDIENTE' })
@@ -307,6 +363,8 @@ export default function PrioritiesPage() {
       return;
     }
 
+    await loadData();
+    await reorderSelectedPriorityGroup(ticketPriority);
     await loadData();
     setSelectingId(null);
   };

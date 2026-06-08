@@ -8,6 +8,7 @@ import { TicketIdentityBlock } from '@/components/tickets/ticket-identity-block'
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
 import { supabaseClient } from '@/lib/supabase/client';
 import { parseTicketPriority } from '@/lib/utils/priority-utils';
+import { TicketPriority } from '@/types/tickets';
 import { UserRole } from '@/types/roles';
 
 type CompraTicket = {
@@ -62,8 +63,45 @@ export default function ComprasPage() {
 
   const canManage = currentRole === UserRole.COMISION_DIRECTIVA || currentRole === UserRole.ADMIN;
 
+  const reorderPriorityQueue = async (priority: TicketPriority) => {
+    const query = await supabaseClient
+      .from('tickets')
+      .select('id, order_number, request_date')
+      .eq('status', 'EN_PROCESO')
+      .eq('assigned_priority', priority)
+      .order('order_number', { ascending: true })
+      .order('request_date', { ascending: true });
+
+    if (query.error) {
+      setError(query.error.message);
+      return;
+    }
+
+    const priorityTickets = (query.data ?? []) as Array<{
+      id: string;
+      order_number: number;
+      request_date: string;
+    }>;
+
+    const results = await Promise.all(
+      priorityTickets.map((ticket, index) =>
+        supabaseClient
+          .from('tickets')
+          .update({ order_number: index + 1 })
+          .eq('id', ticket.id)
+          .select()
+      )
+    );
+
+    const failed = results.find((response) => response.error);
+    if (failed?.error) {
+      setError(failed.error.message);
+    }
+  };
+
   const acceptTicket = async (id: string) => {
     setError(null);
+    const ticket = tickets.find((item) => item.id === id);
     const { data, error } = await supabaseClient
       .from('tickets')
       .update({ status: 'COMPLETADO' })
@@ -73,11 +111,16 @@ export default function ComprasPage() {
     if (error) return setError(error.message);
     if (!data || data.length === 0) return setError('No se pudo actualizar el ticket.');
 
+    if (ticket) {
+      await reorderPriorityQueue(ticket.assigned_priority as TicketPriority);
+    }
+
     await loadTickets();
   };
 
   const rejectTicket = async (id: string) => {
     setError(null);
+    const ticket = tickets.find((item) => item.id === id);
     const { data, error } = await supabaseClient
       .from('tickets')
       .update({ status: 'PENDIENTE' })
@@ -86,6 +129,10 @@ export default function ComprasPage() {
 
     if (error) return setError(error.message);
     if (!data || data.length === 0) return setError('No se pudo actualizar el ticket.');
+
+    if (ticket) {
+      await reorderPriorityQueue(ticket.assigned_priority as TicketPriority);
+    }
 
     await loadTickets();
   };
