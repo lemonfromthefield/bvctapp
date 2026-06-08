@@ -24,6 +24,7 @@ type CompraTicket = {
 export default function ComprasPage() {
   const router = useRouter();
   const [tickets, setTickets] = useState<CompraTicket[]>([]);
+  const [completedTickets, setCompletedTickets] = useState<CompraTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
@@ -40,20 +41,29 @@ export default function ComprasPage() {
 
     setCurrentRole(user.role);
 
-    const result = await supabaseClient
+    // Load active tickets (EN_PROCESO)
+    const activeResult = await supabaseClient
       .from('tickets')
       .select('id, ticket_number, concept, status, assigned_priority, order_number, request_date')
       .eq('status', 'EN_PROCESO')
       .order('order_number', { ascending: true })
       .order('request_date', { ascending: false });
 
-    if (result.error) {
-      setError(result.error.message);
+    // Load completed tickets (COMPLETADO)
+    const completedResult = await supabaseClient
+      .from('tickets')
+      .select('id, ticket_number, concept, status, assigned_priority, order_number, request_date')
+      .eq('status', 'COMPLETADO')
+      .order('updated_at', { ascending: false });
+
+    if (activeResult.error) {
+      setError(activeResult.error.message);
       setLoading(false);
       return;
     }
 
-    setTickets((result.data ?? []) as CompraTicket[]);
+    setTickets((activeResult.data ?? []) as CompraTicket[]);
+    setCompletedTickets((completedResult.data ?? []) as CompraTicket[]);
     setLoading(false);
   }, [router]);
 
@@ -137,6 +147,20 @@ export default function ComprasPage() {
     await loadTickets();
   };
 
+  const revertCompleted = async (id: string) => {
+    setError(null);
+    const { data, error } = await supabaseClient
+      .from('tickets')
+      .update({ status: 'EN_PROCESO' })
+      .eq('id', id)
+      .select();
+
+    if (error) return setError(error.message);
+    if (!data || data.length === 0) return setError('No se pudo revertir el ticket.');
+
+    await loadTickets();
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -148,34 +172,79 @@ export default function ComprasPage() {
 
       {loading ? (
         <div className="rounded-2xl border border-white/70 bg-[var(--surface)] p-6 text-sm text-slate-600">Cargando tickets seleccionados...</div>
-      ) : tickets.length === 0 ? (
-        <div className="rounded-2xl border border-white/70 bg-[var(--surface)] p-6 text-sm text-slate-600">No hay tickets en la cola de Compras.</div>
       ) : (
-        <div className="space-y-3">
-          {tickets.map((ticket) => (
-            <div key={ticket.id} className="rounded-2xl border border-[#ead8cf] bg-[#fff9f5] p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <TicketIdentityBlock
-                  ticketNumber={ticket.ticket_number}
-                  concept={ticket.concept}
-                  status={ticket.status}
-                  assignedPriority={parseTicketPriority(ticket.assigned_priority)}
-                  orderNumber={ticket.order_number}
-                  requestDate={ticket.request_date}
-                />
+        <div className="space-y-6">
+          {/* ─── Active tickets (EN_PROCESO) ─── */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-[#1f120f]">En proceso</h2>
+              <span className="rounded-full bg-[#fff1e8] px-3 py-1 text-xs font-semibold text-[#b42318]">{tickets.length}</span>
+            </div>
+            {tickets.length === 0 ? (
+              <div className="rounded-2xl border border-white/70 bg-[var(--surface)] p-6 text-sm text-slate-600">No hay tickets en la cola de Compras.</div>
+            ) : (
+              <div className="space-y-3">
+                {tickets.map((ticket) => (
+                  <div key={ticket.id} className="rounded-2xl border border-[#ead8cf] bg-[#fff9f5] p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <TicketIdentityBlock
+                        ticketNumber={ticket.ticket_number}
+                        concept={ticket.concept}
+                        status={ticket.status}
+                        assignedPriority={parseTicketPriority(ticket.assigned_priority)}
+                        orderNumber={ticket.order_number}
+                        requestDate={ticket.request_date}
+                      />
 
-                <div className="flex flex-col gap-2 w-full sm:w-auto sm:ml-4">
-                  <Link href={`/tickets/${ticket.id}`} className="text-xs font-semibold text-[#9a3d12] underline-offset-2 hover:underline">Ver detalle</Link>
-                  {canManage ? (
-                    <div className="flex gap-2 mt-2">
-                      <Button onClick={() => acceptTicket(ticket.id)}>Aprobar</Button>
-                      <Button variant="outline" onClick={() => rejectTicket(ticket.id)}>Revertir</Button>
+                      <div className="flex flex-col gap-2 w-full sm:w-auto sm:ml-4">
+                        <Link href={`/tickets/${ticket.id}`} className="text-xs font-semibold text-[#9a3d12] underline-offset-2 hover:underline">Ver detalle</Link>
+                        {canManage ? (
+                          <div className="flex gap-2 mt-2">
+                            <Button onClick={() => acceptTicket(ticket.id)}>Aprobar</Button>
+                            <Button variant="outline" onClick={() => rejectTicket(ticket.id)}>Revertir</Button>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                  ) : null}
-                </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ─── Completed tickets (COMPLETADO) ─── */}
+          {completedTickets.length > 0 && (
+            <div className="space-y-3 pt-4 border-t border-[#ead8cf]">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-[#1f120f]">Finalizados</h2>
+                <span className="rounded-full bg-[#f0f0f0] px-3 py-1 text-xs font-semibold text-[#6b4b42]">{completedTickets.length}</span>
+              </div>
+              <div className="space-y-3">
+                {completedTickets.map((ticket) => (
+                  <div key={ticket.id} className="rounded-2xl border border-[#d9d9d9] bg-[#f9f9f9] p-4 opacity-75">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <TicketIdentityBlock
+                        compact
+                        ticketNumber={ticket.ticket_number}
+                        concept={ticket.concept}
+                        status={ticket.status}
+                        assignedPriority={parseTicketPriority(ticket.assigned_priority)}
+                        orderNumber={ticket.order_number}
+                        requestDate={ticket.request_date}
+                      />
+
+                      <div className="flex flex-col gap-2 w-full sm:w-auto sm:ml-4">
+                        <Link href={`/tickets/${ticket.id}`} className="text-xs font-semibold text-[#9a3d12] underline-offset-2 hover:underline">Ver detalle</Link>
+                        {canManage ? (
+                          <Button variant="outline" onClick={() => revertCompleted(ticket.id)}>Revertir a Compras</Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>
