@@ -114,15 +114,14 @@ export default function PrioritiesPage() {
     });
   }, [tickets]);
 
+  const selectedTickets = useMemo(() => orderedTickets.filter((ticket) => ticket.status === 'EN_PROCESO'), [orderedTickets]);
+
   const pendingResolutionTickets = useMemo(
-    () => orderedTickets.filter((ticket) => ticket.status !== 'COMPLETADO'),
+    () => orderedTickets.filter((ticket) => ticket.status !== 'COMPLETADO' && ticket.status !== 'EN_PROCESO'),
     [orderedTickets]
   );
 
-  const determinedTickets = useMemo(
-    () => orderedTickets.filter((ticket) => ticket.status === 'COMPLETADO'),
-    [orderedTickets]
-  );
+  const determinedTickets = useMemo(() => orderedTickets.filter((ticket) => ticket.status === 'COMPLETADO'), [orderedTickets]);
 
   const updateTicketPriority = async (ticket: PriorityTicket) => {
     if (!canModifyPriorities || !currentUserId) {
@@ -170,7 +169,7 @@ export default function PrioritiesPage() {
     setSelectingId(ticketId);
     setError(null);
 
-    const { error } = await supabaseClient.from('tickets').update({ status: 'ACEPTADO' }).eq('id', ticketId);
+    const { error } = await supabaseClient.from('tickets').update({ status: 'PENDIENTE' }).eq('id', ticketId);
     if (error) {
       setError(error.message);
       setSelectingId(null);
@@ -186,13 +185,13 @@ export default function PrioritiesPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Prioridades</h1>
-        <p className="mt-1 text-slate-600">Jefatura ordena prioridades y Comisión asigna presupuestos con respaldo documental.</p>
+        <p className="mt-1 text-slate-600">Jefatura ordena prioridades y Comisión selecciona solicitudes para Compras.</p>
       </div>
 
       <div className="rounded-3xl border border-white/70 bg-[var(--surface)] p-4 text-sm text-slate-700 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
         {canModifyPriorities
-          ? 'Jefatura/Admin pueden cambiar prioridades. Comisión usa esta vista para presupuesto y seguimiento.'
-          : 'Vista orientada a presupuesto y seguimiento para tu rol.'}
+          ? 'Jefatura/Admin pueden cambiar prioridades. Comisión usa esta vista para seleccionar tickets para Compras.'
+          : 'Vista orientada a selección y seguimiento para tu rol.'}
       </div>
 
       {error ? (
@@ -286,14 +285,52 @@ export default function PrioritiesPage() {
         )}
       </ModuleFoldSection>
 
+      <ModuleFoldSection
+        title="Seleccionados para Compras"
+        count={selectedTickets.length}
+        status="pending"
+        isOpen={true}
+        onToggle={() => {}}
+        emptyMessage="No hay tickets seleccionados para Compras."
+      >
+        {loading ? (
+          <p className="text-sm text-slate-600">Cargando seleccionados...</p>
+        ) : (
+          <div className="space-y-2">
+            {selectedTickets.map((ticket) => (
+              <div key={ticket.id} className="rounded-2xl border border-[#ead8cf] bg-[#fff9f5] p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <TicketIdentityBlock
+                    compact
+                    ticketNumber={ticket.ticket_number}
+                    concept={ticket.concept}
+                    status={ticket.status}
+                    assignedPriority={ticket.assigned_priority}
+                    requestDate={ticket.request_date}
+                  />
+                  <div className="flex items-center gap-2">
+                    <Link href={`/tickets/${ticket.id}`} className="text-xs font-semibold text-[#9a3d12] underline-offset-2 hover:underline">Ver ticket</Link>
+                    {canSelectForCompras ? (
+                      <Button variant="destructive" disabled={selectingId === ticket.id} onClick={() => unselectForCompras(ticket.id)}>
+                        {selectingId === ticket.id ? 'Quitando...' : 'Quitar de Compras'}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </ModuleFoldSection>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
           <p className="text-sm font-medium text-[#6b4b42]">Tickets Activos</p>
           <p className="mt-2 text-3xl font-bold text-[#1f120f]">{pendingResolutionTickets.length}</p>
         </div>
         <div className="rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
-          <p className="text-sm font-medium text-[#6b4b42]">Tickets Determinados</p>
-          <p className="mt-2 text-3xl font-bold text-[#1f120f]">{determinedTickets.length}</p>
+          <p className="text-sm font-medium text-[#6b4b42]">Seleccionados (Compras)</p>
+          <p className="mt-2 text-3xl font-bold text-[#1f120f]">{selectedTickets.length}</p>
         </div>
         <div className="rounded-3xl border border-white/70 bg-[var(--surface)] p-5 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
           <p className="text-sm font-medium text-[#6b4b42]">Total tickets</p>

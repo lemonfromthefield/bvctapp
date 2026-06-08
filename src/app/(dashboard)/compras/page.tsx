@@ -62,14 +62,14 @@ export default function ComprasPage() {
 
   const acceptTicket = async (id: string) => {
     setError(null);
-    const { error } = await supabaseClient.from('tickets').update({ status: 'ACEPTADO' }).eq('id', id);
+    const { error } = await supabaseClient.from('tickets').update({ status: 'COMPLETADO' }).eq('id', id);
     if (error) return setError(error.message);
     await loadTickets();
   };
 
   const rejectTicket = async (id: string) => {
     setError(null);
-    const { error } = await supabaseClient.from('tickets').update({ status: 'RECHAZADO' }).eq('id', id);
+    const { error } = await supabaseClient.from('tickets').update({ status: 'PENDIENTE' }).eq('id', id);
     if (error) return setError(error.message);
     await loadTickets();
   };
@@ -104,8 +104,8 @@ export default function ComprasPage() {
                   <Link href={`/tickets/${ticket.id}`} className="text-xs font-semibold text-[#9a3d12] underline-offset-2 hover:underline">Ver detalle</Link>
                   {canManage ? (
                     <div className="flex gap-2 mt-2">
-                      <Button onClick={() => acceptTicket(ticket.id)}>Aceptar</Button>
-                      <Button variant="outline" onClick={() => rejectTicket(ticket.id)}>Devolver</Button>
+                      <Button onClick={() => acceptTicket(ticket.id)}>Aprobar</Button>
+                      <Button variant="outline" onClick={() => rejectTicket(ticket.id)}>Revertir</Button>
                     </div>
                   ) : null}
                 </div>
