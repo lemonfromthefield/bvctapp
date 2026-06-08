@@ -213,6 +213,17 @@ export default function PrioritiesPage() {
     const [movedTicket] = reordered.splice(draggedIndex, 1);
     reordered.splice(targetIndex, 0, movedTicket);
 
+    // Optimistically update UI: set order_number locally before persisting
+    const snapshot = tickets;
+    const updatedLocal = tickets.map((t) => {
+      if (t.assigned_priority !== priority) return t;
+      const idx = reordered.findIndex((r) => r.id === t.id);
+      if (idx === -1) return t;
+      return { ...t, order_number: idx + 1 };
+    });
+
+    setTickets(updatedLocal);
+
     const results = await Promise.all(
       reordered.map((ticket, index) =>
         supabaseClient
@@ -226,6 +237,7 @@ export default function PrioritiesPage() {
     const failed = results.find((response) => response.error);
     if (failed?.error) {
       setError(failed.error.message);
+      setTickets(snapshot);
       setReorderingId(null);
       return;
     }
@@ -400,30 +412,35 @@ export default function PrioritiesPage() {
       return;
     }
 
-    const neighborTicket = samePriorityTickets[swapIndex];
-    const currentOrder = currentTicket.order_number ?? 0;
-    const neighborOrder = neighborTicket.order_number ?? 0;
+    const reordered = [...samePriorityTickets];
+    const [movedTicket] = reordered.splice(index, 1);
+    reordered.splice(swapIndex, 0, movedTicket);
 
-    const { error: firstError } = await supabaseClient
-      .from('tickets')
-      .update({ order_number: neighborOrder })
-      .eq('id', currentTicket.id)
-      .select();
+    // Optimistic local update
+    const snapshot = tickets;
+    const updatedLocal = tickets.map((t) => {
+      if (t.assigned_priority !== currentTicket.assigned_priority) return t;
+      const idx = reordered.findIndex((r) => r.id === t.id);
+      if (idx === -1) return t;
+      return { ...t, order_number: idx + 1 };
+    });
 
-    if (firstError) {
-      setError(firstError.message);
-      setReorderingId(null);
-      return;
-    }
+    setTickets(updatedLocal);
 
-    const { error: secondError } = await supabaseClient
-      .from('tickets')
-      .update({ order_number: currentOrder })
-      .eq('id', neighborTicket.id)
-      .select();
+    const results = await Promise.all(
+      reordered.map((ticket, position) =>
+        supabaseClient
+          .from('tickets')
+          .update({ order_number: position + 1 })
+          .eq('id', ticket.id)
+          .select()
+      )
+    );
 
-    if (secondError) {
-      setError(secondError.message);
+    const failed = results.find((response) => response.error);
+    if (failed?.error) {
+      setError(failed.error.message);
+      setTickets(snapshot);
       setReorderingId(null);
       return;
     }
@@ -576,7 +593,14 @@ export default function PrioritiesPage() {
         emptyMessage="No hay tickets seleccionados para Compras."
       >
         {loading ? (
-          <p className="text-sm text-slate-600">Cargando seleccionados...</p>
+          <div className="space-y-3">
+            {[1,2,3].map((i) => (
+              <div key={i} className="rounded-2xl border border-[#ead8cf] bg-white p-3 animate-pulse">
+                <div className="h-4 w-3/5 mb-2 bg-slate-200 rounded" />
+                <div className="h-3 w-1/2 bg-slate-200 rounded" />
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="space-y-4">
             {selectedTicketGroups.map(({ priority, tickets }) => (
@@ -589,7 +613,7 @@ export default function PrioritiesPage() {
                   <Badge variant={getTicketPriorityBadgeVariant(priority)}>{tickets.length}</Badge>
                 </div>
                 <div className="space-y-2">
-                  {tickets.map((ticket) => (
+                    {tickets.map((ticket) => (
                     <div
                       key={ticket.id}
                       draggable={canReorderPriorities}
@@ -597,9 +621,10 @@ export default function PrioritiesPage() {
                       onDragOver={(event) => handleDragOver(event, ticket.id)}
                       onDrop={(event) => handleDrop(event, ticket.id, priority)}
                       onDragEnd={handleDragEnd}
-                      className={`rounded-2xl border border-[#ead8cf] bg-white px-3 py-3 transition ${
-                        dragOverTicketId === ticket.id ? 'ring-2 ring-slate-300 bg-slate-50' : ''
+                      className={`rounded-2xl border border-[#ead8cf] bg-white px-3 py-3 transition-all duration-200 transform-gpu ${
+                        dragOverTicketId === ticket.id ? 'ring-2 ring-slate-300 bg-slate-50 scale-[1.01]' : ''
                       } ${draggingTicketId === ticket.id ? 'opacity-70' : 'opacity-100'}`}
+                      style={{ willChange: 'transform, opacity' }}
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <TicketIdentityBlock
