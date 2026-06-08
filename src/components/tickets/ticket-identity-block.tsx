@@ -8,6 +8,7 @@ type TicketIdentityBlockProps = {
   status: string;
   assignedPriority: string | null | undefined;
   requestDate?: string | null;
+  orderNumber?: number;
   budgetStatus?: string | null;
   budgetAmount?: number | null;
   compact?: boolean;
@@ -19,6 +20,7 @@ export function TicketIdentityBlock({
   status,
   assignedPriority,
   requestDate,
+  orderNumber,
   compact = false,
 }: TicketIdentityBlockProps) {
   const normalizedPriority = parseTicketPriority(assignedPriority);
@@ -26,9 +28,16 @@ export function TicketIdentityBlock({
   return (
     <div className="min-w-0 space-y-2">
       <div>
-        <p className={`font-semibold text-[#1f120f] ${compact ? 'text-sm' : 'text-base'}`}>
-          #{ticketNumber} - {concept}
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className={`font-semibold text-[#1f120f] ${compact ? 'text-sm' : 'text-base'}`}>
+            #{ticketNumber} - {concept}
+          </p>
+          {typeof orderNumber === 'number' ? (
+            <span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+              Orden {orderNumber}
+            </span>
+          ) : null}
+        </div>
         {requestDate ? (
           <p className="mt-1 text-xs text-slate-500">
             Solicitado el {new Date(requestDate).toLocaleDateString('es-AR')}

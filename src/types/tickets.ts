@@ -94,6 +94,7 @@ export interface Ticket {
   status: TicketStatus;
   suggested_priority: TicketPriority;
   assigned_priority: TicketPriority;
+  order_number: number;
   priority_assigned_date?: string;
 
   // Rejection details

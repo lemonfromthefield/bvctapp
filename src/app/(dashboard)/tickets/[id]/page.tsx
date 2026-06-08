@@ -22,6 +22,7 @@ type TicketDetail = {
   status: string;
   suggested_priority: string;
   assigned_priority: string;
+  order_number: number;
   request_date: string;
   acceptance_date: string | null;
   rejection_date: string | null;
@@ -144,7 +145,7 @@ export default function TicketDetailPage() {
         .from('tickets')
         .select(`
           id, ticket_number, concept, quantity, observations,
-          status, suggested_priority, assigned_priority,
+          status, suggested_priority, assigned_priority, order_number,
           request_date, acceptance_date, rejection_date, rejection_reason,
           priority_assigned_date, user_id,
           areas ( name, code )
@@ -333,9 +334,14 @@ export default function TicketDetailPage() {
       {/* ── Header ── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#1f120f]">
-            Ticket #{ticket.ticket_number}
-          </h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold text-[#1f120f]">
+              Ticket #{ticket.ticket_number}
+            </h1>
+            <span className="rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              Orden {ticket.order_number}
+            </span>
+          </div>
           <p className="mt-1 text-slate-600">{ticket.concept}</p>
         </div>
         <Button variant="outline" onClick={() => router.push('/tickets')}>
@@ -364,9 +370,16 @@ export default function TicketDetailPage() {
             <Button disabled={selecting} onClick={async () => {
               setSelecting(true);
               setError(null);
-              const { error } = await supabaseClient.from('tickets').update({ status: 'EN_PROCESO' }).eq('id', ticket.id);
+              const { data, error } = await supabaseClient
+                .from('tickets')
+                .update({ status: 'EN_PROCESO' })
+                .eq('id', ticket.id)
+                .select();
+
               if (error) setError(error.message);
-              await loadTicket();
+              else if (!data || data.length === 0) setError('No se pudo actualizar el ticket.');
+              else await loadTicket();
+
               setSelecting(false);
             }}>
               {selecting ? 'Seleccionando...' : 'Seleccionar'}
@@ -375,9 +388,16 @@ export default function TicketDetailPage() {
             <Button variant="destructive" disabled={selecting} onClick={async () => {
               setSelecting(true);
               setError(null);
-              const { error } = await supabaseClient.from('tickets').update({ status: 'PENDIENTE' }).eq('id', ticket.id);
+              const { data, error } = await supabaseClient
+                .from('tickets')
+                .update({ status: 'PENDIENTE' })
+                .eq('id', ticket.id)
+                .select();
+
               if (error) setError(error.message);
-              await loadTicket();
+              else if (!data || data.length === 0) setError('No se pudo actualizar el ticket.');
+              else await loadTicket();
+
               setSelecting(false);
             }}>
               {selecting ? 'Quitando...' : 'Quitar de Compras'}

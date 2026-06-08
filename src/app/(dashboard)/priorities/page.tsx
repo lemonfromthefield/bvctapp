@@ -19,12 +19,13 @@ type PriorityTicket = {
   concept: string;
   status: string;
   assigned_priority: TicketPriority;
+  order_number: number;
   request_date: string;
 };
 
 const PRIORITY_ORDER = Object.values(TicketPriority).sort((left, right) => PRIORITY_RULES[right].precedence - PRIORITY_RULES[left].precedence);
 
-const ACTIVE_STATUSES = ['ACEPTADO', 'PRESUPUESTADO', 'EN_PROCESO', 'COMPLETADO'] as const;
+const ACTIVE_STATUSES = ['PENDIENTE', 'ACEPTADO', 'PRESUPUESTADO', 'EN_PROCESO', 'COMPLETADO'] as const;
 
 export default function PrioritiesPage() {
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
@@ -33,6 +34,7 @@ export default function PrioritiesPage() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [selectingId, setSelectingId] = useState<string | null>(null);
+  const [reorderingId, setReorderingId] = useState<string | null>(null);
   const [selectedPriorityById, setSelectedPriorityById] = useState<Record<string, TicketPriority>>({});
   const [pendingSectionOpen, setPendingSectionOpen] = useState(true);
   const [determinedSectionOpen, setDeterminedSectionOpen] = useState(false);
@@ -47,6 +49,10 @@ export default function PrioritiesPage() {
     currentRole === UserRole.COMISION_DIRECTIVA ||
     currentRole === UserRole.ADMIN;
 
+  const canReorderPriorities =
+    currentRole === UserRole.JEFATURA ||
+    currentRole === UserRole.COMISION_DIRECTIVA ||
+    currentRole === UserRole.ADMIN;
 
   const loadData = async () => {
     setLoading(true);
@@ -64,8 +70,10 @@ export default function PrioritiesPage() {
 
     const ticketsResult = await supabaseClient
       .from('tickets')
-      .select('id, ticket_number, concept, status, assigned_priority, request_date')
+      .select('id, ticket_number, concept, status, assigned_priority, order_number, request_date')
       .in('status', [...ACTIVE_STATUSES])
+      .order('assigned_priority', { ascending: false })
+      .order('order_number', { ascending: true })
       .order('request_date', { ascending: true });
 
     if (ticketsResult.error) {
@@ -81,6 +89,7 @@ export default function PrioritiesPage() {
         concept: ticket.concept ?? '',
         status: ticket.status ?? '',
         assigned_priority: parseTicketPriority(ticket.assigned_priority as string | undefined),
+        order_number: ticket.order_number ?? 0,
         request_date: ticket.request_date ?? new Date().toISOString(),
       }))
     );
@@ -97,7 +106,12 @@ export default function PrioritiesPage() {
       priority,
       tickets: tickets
         .filter((ticket) => ticket.assigned_priority === priority)
-        .sort((left, right) => new Date(left.request_date).getTime() - new Date(right.request_date).getTime()),
+        .sort((left, right) => {
+          if (left.order_number !== right.order_number) {
+            return left.order_number - right.order_number;
+          }
+          return new Date(left.request_date).getTime() - new Date(right.request_date).getTime();
+        }),
     }));
   }, [tickets]);
 
@@ -108,6 +122,10 @@ export default function PrioritiesPage() {
 
       if (priorityDiff !== 0) {
         return priorityDiff;
+      }
+
+      if (left.order_number !== right.order_number) {
+        return left.order_number - right.order_number;
       }
 
       return new Date(left.request_date).getTime() - new Date(right.request_date).getTime();
@@ -153,9 +171,20 @@ export default function PrioritiesPage() {
     setSelectingId(ticketId);
     setError(null);
 
-    const { error } = await supabaseClient.from('tickets').update({ status: 'EN_PROCESO' }).eq('id', ticketId);
+    const { data, error } = await supabaseClient
+      .from('tickets')
+      .update({ status: 'EN_PROCESO' })
+      .eq('id', ticketId)
+      .select();
+
     if (error) {
       setError(error.message);
+      setSelectingId(null);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      setError('No se pudo actualizar el ticket. Verificá tus permisos y el estado actual.');
       setSelectingId(null);
       return;
     }
@@ -169,9 +198,20 @@ export default function PrioritiesPage() {
     setSelectingId(ticketId);
     setError(null);
 
-    const { error } = await supabaseClient.from('tickets').update({ status: 'PENDIENTE' }).eq('id', ticketId);
+    const { data, error } = await supabaseClient
+      .from('tickets')
+      .update({ status: 'PENDIENTE' })
+      .eq('id', ticketId)
+      .select();
+
     if (error) {
       setError(error.message);
+      setSelectingId(null);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      setError('No se pudo actualizar el ticket. Verificá tus permisos y el estado actual.');
       setSelectingId(null);
       return;
     }
@@ -180,6 +220,60 @@ export default function PrioritiesPage() {
     setSelectingId(null);
   };
 
+  const moveTicketOrder = async (ticketId: string, direction: 'up' | 'down') => {
+    if (!canReorderPriorities) return;
+    setReorderingId(ticketId);
+    setError(null);
+
+    const currentTicket = orderedTickets.find((ticket) => ticket.id === ticketId);
+    if (!currentTicket) {
+      setError('No se encontró el ticket para reordenar.');
+      setReorderingId(null);
+      return;
+    }
+
+    const samePriorityTickets = orderedTickets.filter(
+      (ticket) => ticket.assigned_priority === currentTicket.assigned_priority
+    );
+    const index = samePriorityTickets.findIndex((ticket) => ticket.id === ticketId);
+    const swapIndex = direction === 'up' ? index - 1 : index + 1;
+
+    if (swapIndex < 0 || swapIndex >= samePriorityTickets.length) {
+      setReorderingId(null);
+      return;
+    }
+
+    const neighborTicket = samePriorityTickets[swapIndex];
+    const currentOrder = currentTicket.order_number ?? 0;
+    const neighborOrder = neighborTicket.order_number ?? 0;
+
+    const { error: firstError } = await supabaseClient
+      .from('tickets')
+      .update({ order_number: neighborOrder })
+      .eq('id', currentTicket.id)
+      .select();
+
+    if (firstError) {
+      setError(firstError.message);
+      setReorderingId(null);
+      return;
+    }
+
+    const { error: secondError } = await supabaseClient
+      .from('tickets')
+      .update({ order_number: currentOrder })
+      .eq('id', neighborTicket.id)
+      .select();
+
+    if (secondError) {
+      setError(secondError.message);
+      setReorderingId(null);
+      return;
+    }
+
+    await loadData();
+    setReorderingId(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -221,6 +315,7 @@ export default function PrioritiesPage() {
                       concept={ticket.concept}
                       status={ticket.status}
                       assignedPriority={ticket.assigned_priority}
+                      orderNumber={ticket.order_number}
                       requestDate={ticket.request_date}
                     />
                     <div className="flex flex-wrap items-center gap-2">
@@ -264,16 +359,38 @@ export default function PrioritiesPage() {
                     <p className="font-semibold text-[#1f120f]">Compras</p>
                     <p className="text-xs text-slate-500">Este módulo gestiona prioridades y seguimiento de compras, sin asignación presupuestaria directa.</p>
 
-                    {canSelectForCompras ? (
-                      ticket.status !== 'EN_PROCESO' ? (
-                        <Button className="w-full" disabled={selectingId === ticket.id} onClick={() => selectForCompras(ticket.id)}>
-                          {selectingId === ticket.id ? 'Seleccionando...' : 'Seleccionar para Compras'}
-                        </Button>
-                      ) : (
-                        <Button variant="destructive" className="w-full" disabled={selectingId === ticket.id} onClick={() => unselectForCompras(ticket.id)}>
-                          {selectingId === ticket.id ? 'Quitando...' : 'Quitar de Compras'}
-                        </Button>
-                      )
+                    {canReorderPriorities ? (
+                      <div className="grid gap-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            disabled={reorderingId === ticket.id}
+                            onClick={() => moveTicketOrder(ticket.id, 'up')}
+                          >
+                            {reorderingId === ticket.id ? 'Moviendo...' : 'Subir orden'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            disabled={reorderingId === ticket.id}
+                            onClick={() => moveTicketOrder(ticket.id, 'down')}
+                          >
+                            {reorderingId === ticket.id ? 'Moviendo...' : 'Bajar orden'}
+                          </Button>
+                        </div>
+                        {canSelectForCompras ? (
+                          ticket.status !== 'EN_PROCESO' ? (
+                            <Button className="w-full" disabled={selectingId === ticket.id} onClick={() => selectForCompras(ticket.id)}>
+                              {selectingId === ticket.id ? 'Seleccionando...' : 'Seleccionar para Compras'}
+                            </Button>
+                          ) : (
+                            <Button variant="destructive" className="w-full" disabled={selectingId === ticket.id} onClick={() => unselectForCompras(ticket.id)}>
+                              {selectingId === ticket.id ? 'Quitando...' : 'Quitar de Compras'}
+                            </Button>
+                          )
+                        ) : null}
+                      </div>
                     ) : (
                       <p className="text-xs text-slate-500">Visible solo para Comisión Directiva y Admin.</p>
                     )}
@@ -306,14 +423,28 @@ export default function PrioritiesPage() {
                     concept={ticket.concept}
                     status={ticket.status}
                     assignedPriority={ticket.assigned_priority}
+                    orderNumber={ticket.order_number}
                     requestDate={ticket.request_date}
                   />
                   <div className="flex items-center gap-2">
                     <Link href={`/tickets/${ticket.id}`} className="text-xs font-semibold text-[#9a3d12] underline-offset-2 hover:underline">Ver ticket</Link>
-                    {canSelectForCompras ? (
-                      <Button variant="destructive" disabled={selectingId === ticket.id} onClick={() => unselectForCompras(ticket.id)}>
-                        {selectingId === ticket.id ? 'Quitando...' : 'Quitar de Compras'}
-                      </Button>
+                    {canReorderPriorities ? (
+                      <div className="grid gap-2">
+                        <Button
+                          variant="outline"
+                          disabled={reorderingId === ticket.id}
+                          onClick={() => moveTicketOrder(ticket.id, 'up')}
+                        >
+                          {reorderingId === ticket.id ? 'Moviendo...' : 'Subir'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          disabled={reorderingId === ticket.id}
+                          onClick={() => moveTicketOrder(ticket.id, 'down')}
+                        >
+                          {reorderingId === ticket.id ? 'Moviendo...' : 'Bajar'}
+                        </Button>
+                      </div>
                     ) : null}
                   </div>
                 </div>

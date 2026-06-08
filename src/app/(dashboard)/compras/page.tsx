@@ -16,6 +16,7 @@ type CompraTicket = {
   concept: string;
   status: string;
   assigned_priority: string;
+  order_number: number;
   request_date: string;
 };
 
@@ -40,8 +41,9 @@ export default function ComprasPage() {
 
     const result = await supabaseClient
       .from('tickets')
-      .select('id, ticket_number, concept, status, assigned_priority, request_date')
+      .select('id, ticket_number, concept, status, assigned_priority, order_number, request_date')
       .eq('status', 'EN_PROCESO')
+      .order('order_number', { ascending: true })
       .order('request_date', { ascending: false });
 
     if (result.error) {
@@ -62,15 +64,29 @@ export default function ComprasPage() {
 
   const acceptTicket = async (id: string) => {
     setError(null);
-    const { error } = await supabaseClient.from('tickets').update({ status: 'COMPLETADO' }).eq('id', id);
+    const { data, error } = await supabaseClient
+      .from('tickets')
+      .update({ status: 'COMPLETADO' })
+      .eq('id', id)
+      .select();
+
     if (error) return setError(error.message);
+    if (!data || data.length === 0) return setError('No se pudo actualizar el ticket.');
+
     await loadTickets();
   };
 
   const rejectTicket = async (id: string) => {
     setError(null);
-    const { error } = await supabaseClient.from('tickets').update({ status: 'PENDIENTE' }).eq('id', id);
+    const { data, error } = await supabaseClient
+      .from('tickets')
+      .update({ status: 'PENDIENTE' })
+      .eq('id', id)
+      .select();
+
     if (error) return setError(error.message);
+    if (!data || data.length === 0) return setError('No se pudo actualizar el ticket.');
+
     await loadTickets();
   };
 
@@ -97,6 +113,7 @@ export default function ComprasPage() {
                   concept={ticket.concept}
                   status={ticket.status}
                   assignedPriority={parseTicketPriority(ticket.assigned_priority)}
+                  orderNumber={ticket.order_number}
                   requestDate={ticket.request_date}
                 />
 

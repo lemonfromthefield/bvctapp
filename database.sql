@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   status ticket_status_enum DEFAULT 'BORRADOR',
   suggested_priority ticket_priority_enum DEFAULT 'SIN_PRIORIDAD',
   assigned_priority ticket_priority_enum DEFAULT 'SIN_PRIORIDAD',
+  order_number INTEGER DEFAULT 0,
   priority_assigned_date TIMESTAMP WITH TIME ZONE,
   priority_assigned_by UUID REFERENCES auth.users ON DELETE SET NULL,
   
@@ -148,6 +149,7 @@ CREATE INDEX idx_tickets_user_id ON tickets(user_id);
 CREATE INDEX idx_tickets_area_id ON tickets(area_id);
 CREATE INDEX idx_tickets_status ON tickets(status);
 CREATE INDEX idx_tickets_priority ON tickets(assigned_priority);
+CREATE INDEX idx_tickets_order_number ON tickets(order_number);
 CREATE INDEX idx_tickets_created_at ON tickets(created_at DESC);
 CREATE INDEX idx_tickets_request_date ON tickets(request_date DESC);
 CREATE INDEX idx_tickets_concept_gin ON tickets USING gin(concept gin_trgm_ops);
