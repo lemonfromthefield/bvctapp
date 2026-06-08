@@ -6,7 +6,6 @@ import { ArrowLeft, Clock, FileText, Paperclip, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getCurrentUser } from '@/lib/auth/supabase-auth';
 import { supabaseClient } from '@/lib/supabase/client';
 import { PRIORITY_RULES, TicketPriority } from '@/types/tickets';
 import type { UserRole } from '@/types/roles';
@@ -28,10 +27,6 @@ type TicketDetail = {
   rejection_date: string | null;
   rejection_reason: string | null;
   priority_assigned_date: string | null;
-  budget_assigned_amount: number | null;
-  budget_assignment_date: string | null;
-  budget_status: string | null;
-  disbursement_date: string | null;
   areas: { name: string; code: string } | null;
   profiles: { full_name: string; role: string } | null;
 };
@@ -135,7 +130,6 @@ export default function TicketDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadingFile, setDownloadingFile] = useState<string | null>(null);
-  const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -143,13 +137,6 @@ export default function TicketDetailPage() {
     const load = async () => {
       setLoading(true);
       setError(null);
-
-      const currentUser = await getCurrentUser();
-      setCurrentRole(currentUser?.role ?? null);
-      const canCurrentUserViewBudgetAssignments =
-        currentUser?.role === 'JEFATURA' ||
-        currentUser?.role === 'COMISION_DIRECTIVA' ||
-        currentUser?.role === 'ADMIN';
 
       const [ticketResult, profileResult, historyResult, attachmentsResult] = await Promise.all([
         supabaseClient
@@ -159,7 +146,6 @@ export default function TicketDetailPage() {
             status, suggested_priority, assigned_priority,
             request_date, acceptance_date, rejection_date, rejection_reason,
             priority_assigned_date, user_id,
-            ${canCurrentUserViewBudgetAssignments ? 'budget_assigned_amount, budget_assignment_date, budget_status, disbursement_date,' : ''}
             areas ( name, code )
           `)
           .eq('id', id)
@@ -209,10 +195,6 @@ export default function TicketDetailPage() {
 
         setTicket({
           ...rawTicket,
-          budget_assigned_amount: canCurrentUserViewBudgetAssignments ? rawTicket.budget_assigned_amount ?? null : null,
-          budget_assignment_date: canCurrentUserViewBudgetAssignments ? rawTicket.budget_assignment_date ?? null : null,
-          budget_status: canCurrentUserViewBudgetAssignments ? rawTicket.budget_status ?? null : null,
-          disbursement_date: canCurrentUserViewBudgetAssignments ? rawTicket.disbursement_date ?? null : null,
           areas: firstOrNull(rawTicket.areas),
           profiles: profileData,
         });
@@ -318,10 +300,6 @@ export default function TicketDetailPage() {
 
   const priorityRule = PRIORITY_RULES[ticket.assigned_priority as TicketPriority] ?? PRIORITY_RULES[TicketPriority.SIN_PRIORIDAD];
   const creatorRole = ticket.profiles?.role as UserRole | undefined;
-  const canViewBudgetAssignments =
-    currentRole === 'JEFATURA' ||
-    currentRole === 'COMISION_DIRECTIVA' ||
-    currentRole === 'ADMIN';
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
@@ -406,18 +384,9 @@ export default function TicketDetailPage() {
               </div>
             ) : null}
             <DataRow label="Prioridad asignada el" value={fmtDate(ticket.priority_assigned_date, true)} pending={!ticket.priority_assigned_date} />
-            {canViewBudgetAssignments ? (
-              <>
-                <DataRow label="Presupuesto asignado" value={ticket.budget_assigned_amount != null ? `$${ticket.budget_assigned_amount.toLocaleString('es-AR')}` : undefined} pending={ticket.budget_assigned_amount == null} />
-                <DataRow label="Fecha de presupuesto" value={fmtDate(ticket.budget_assignment_date)} pending={!ticket.budget_assignment_date} />
-                <DataRow label="Estado presupuestario" value={ticket.budget_status ?? undefined} pending={!ticket.budget_status} />
-                <DataRow label="Fecha de abono" value={fmtDate(ticket.disbursement_date)} pending={!ticket.disbursement_date} />
-              </>
-            ) : (
-              <div className="sm:col-span-2 rounded-2xl border border-[#ead8cf] bg-[#fff9f5] px-4 py-3 text-sm text-[#6b4b42]">
-                El detalle presupuestario queda visible solo para Jefatura, Comisión Directiva y Administración.
-              </div>
-            )}
+            <div className="sm:col-span-2 rounded-2xl border border-[#ead8cf] bg-[#fff9f5] px-4 py-3 text-sm text-[#6b4b42]">
+              El detalle presupuestario ya no forma parte de esta vista.
+            </div>
           </dl>
         </CardContent>
       </Card>

@@ -8,6 +8,8 @@ type TicketIdentityBlockProps = {
   status: string;
   assignedPriority: string | null | undefined;
   requestDate?: string | null;
+  budgetStatus?: string | null;
+  budgetAmount?: number | null;
   compact?: boolean;
 };
 
@@ -17,8 +19,6 @@ export function TicketIdentityBlock({
   status,
   assignedPriority,
   requestDate,
-  budgetStatus,
-  budgetAmount,
   compact = false,
 }: TicketIdentityBlockProps) {
   const normalizedPriority = parseTicketPriority(assignedPriority);

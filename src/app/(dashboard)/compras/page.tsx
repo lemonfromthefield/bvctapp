@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { TicketIdentityBlock } from '@/components/tickets/ticket-identity-block';
@@ -26,7 +26,7 @@ export default function ComprasPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
 
-  const loadTickets = async () => {
+  const loadTickets = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -52,11 +52,11 @@ export default function ComprasPage() {
 
     setTickets((result.data ?? []) as CompraTicket[]);
     setLoading(false);
-  };
+  }, [router]);
 
   useEffect(() => {
     loadTickets();
-  }, []);
+  }, [loadTickets]);
 
   const canManage = currentRole === UserRole.COMISION_DIRECTIVA || currentRole === UserRole.ADMIN;
 

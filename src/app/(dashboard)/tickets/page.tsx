@@ -22,8 +22,6 @@ type TicketSummary = {
   suggested_priority: TicketPriority;
   assigned_priority: string;
   request_date: string;
-  budget_assigned_amount: number | null;
-  budget_status: string | null;
 };
 
 type TicketMetrics = {
@@ -71,9 +69,8 @@ export default function TicketsPage() {
       const [ticketsResult, pendingResult, acceptedResult, deniedResult] = await Promise.all([
         supabaseClient
           .from('tickets')
-          .select('id, ticket_number, user_id, concept, status, suggested_priority, assigned_priority, request_date, budget_assigned_amount, budget_status')
-          .order('request_date', { ascending: false })
-          ,
+          .select('id, ticket_number, user_id, concept, status, suggested_priority, assigned_priority, request_date')
+          .order('request_date', { ascending: false }),
         supabaseClient
           .from('tickets')
           .select('id', { count: 'exact', head: true })
@@ -301,8 +298,6 @@ export default function TicketsPage() {
             status={ticket.status}
             assignedPriority={previewPriority}
             requestDate={ticket.request_date}
-            budgetStatus={ticket.budget_status}
-            budgetAmount={ticket.budget_assigned_amount}
           />
           <div className="flex flex-wrap items-center gap-2">
             {allowReviewActions && canReviewTickets && isPendingReviewStatus(ticket.status) ? (
