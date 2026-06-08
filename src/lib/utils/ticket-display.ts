@@ -11,7 +11,7 @@ export const TICKET_STATUS_LABELS: Record<string, string> = {
   ACEPTADO: 'Aceptado',
   RECHAZADO: 'Denegado',
   PRESUPUESTADO: 'Presupuestado',
-  EN_PROCESO: 'En curso',
+  EN_PROCESO: 'Seleccionado para Compras',
   COMPLETADO: 'Completado',
   CANCELADO: 'Cancelado',
 };

@@ -44,6 +44,27 @@ CREATE TYPE budget_status_enum AS ENUM (
   'CANCELADO'
 );
 
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_enum e ON e.enumtypid = t.oid
+    WHERE t.typname = 'budget_status_enum'
+      AND e.enumlabel = 'DESEMBOLSADO'
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_enum e ON e.enumtypid = t.oid
+    WHERE t.typname = 'budget_status_enum'
+      AND e.enumlabel = 'ABONADO'
+  ) THEN
+    ALTER TYPE budget_status_enum RENAME VALUE 'DESEMBOLSADO' TO 'ABONADO';
+  END IF;
+END;
+$$;
+
 -- ============================================
 -- TABLES
 -- ============================================
@@ -578,6 +599,20 @@ ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
 
+DO $$
+BEGIN
+  IF to_regclass('public.tickets') IS NOT NULL THEN
+    UPDATE tickets
+    SET budget_status = 'ABONADO'
+    WHERE budget_status = 'DESEMBOLSADO';
+
+    UPDATE tickets
+    SET final_status = 'ABONADO'
+    WHERE final_status = 'DESEMBOLSADO';
+  END IF;
+END;
+$$;
+
 
 CREATE OR REPLACE FUNCTION public.get_my_role()
 RETURNS TEXT
@@ -605,7 +640,7 @@ BEGIN
       COALESCE(SUM(CASE WHEN movement_type = 'EGRESO' THEN amount ELSE 0 END), 0)::NUMERIC AS total_expense
     FROM budget_movements
   ),
-  -- Solo sumar asignados que NO están desembolsados/comprobados
+  -- Compatibilidad transicional: contemplar ABONADO y DESEMBOLSADO como equivalentes
   assigned_only AS (
     SELECT COALESCE(SUM(assigned_amount), 0)::NUMERIC AS total_budgeted
     FROM budgets
@@ -614,7 +649,7 @@ BEGIN
   disbursed_only AS (
     SELECT COALESCE(SUM(COALESCE(disbursed_amount, assigned_amount)), 0)::NUMERIC AS total_disbursed
     FROM budgets
-    WHERE status IN ('ABONADO', 'COMPROBADO')
+    WHERE status::TEXT IN ('ABONADO', 'DESEMBOLSADO', 'COMPROBADO')
   )
   SELECT
     movement_totals.total_income,
@@ -1011,7 +1046,7 @@ BEGIN
     RAISE EXCEPTION 'No se encontró el presupuesto';
   END IF;
 
-  IF budget_record.status NOT IN ('ABONADO', 'COMPROBADO') THEN
+  IF budget_record.status::TEXT NOT IN ('ABONADO', 'DESEMBOLSADO', 'COMPROBADO') THEN
     RAISE EXCEPTION 'Solo se pueden revertir abonos confirmados';
   END IF;
 

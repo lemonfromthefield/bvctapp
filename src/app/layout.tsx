@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: 'Bomberos Voluntarios Colonia Tirolesa | Sistema de Gestión',
-  description: 'Sistema de gestión integral para tickets, prioridades, presupuestos y usuarios.',
+  description: 'Sistema de gestión integral para tickets, prioridades, compras y usuarios.',
   icons: {
     icon: '/icon.png',
     shortcut: '/icon.png',

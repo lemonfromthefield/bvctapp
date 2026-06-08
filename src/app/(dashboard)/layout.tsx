@@ -58,7 +58,7 @@ export default function DashboardLayout({
         <div className="border-t border-white/10 p-4">
           <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
             <p className="text-xs uppercase tracking-[0.2em] text-[#ffd9c0]">Centro operativo</p>
-            <p className="mt-2 text-sm text-white/85">Gestión institucional de tickets, prioridades y presupuestos.</p>
+            <p className="mt-2 text-sm text-white/85">Gestión institucional de tickets, prioridades y compras.</p>
           </div>
         </div>
       </div>
@@ -126,7 +126,7 @@ export default function DashboardLayout({
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[#b42318]">Sistema de gestión</p>
                 <h1 className="truncate text-base font-semibold tracking-tight text-[#1f120f] md:text-2xl">{FIRE_STATION_NAME}</h1>
-                <p className="text-xs text-[#6b4b42]">Tickets, prioridades, presupuestos y usuarios.</p>
+                <p className="text-xs text-[#6b4b42]">Tickets, prioridades, compras y usuarios.</p>
               </div>
             </div>
             <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap">

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { TicketIdentityBlock } from '@/components/tickets/ticket-identity-block';
 import { FilePicker } from '@/components/ui/file-picker';
+import { BudgetHistoryDropdown } from '@/components/budgets/budget-history-dropdown';
 import { Input } from '@/components/ui/input';
 import { ModuleFoldSection } from '@/components/ui/module-fold-section';
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
@@ -20,7 +21,7 @@ type BudgetRow = {
   ticket_id: string;
   assigned_amount: number;
   disbursed_amount: number | null;
-  status: 'ASIGNADO' | 'ABONADO' | 'COMPROBADO' | 'CANCELADO';
+  status: 'ASIGNADO' | 'ABONADO' | 'DESEMBOLSADO' | 'COMPROBADO' | 'CANCELADO';
   assigned_date: string;
 };
 
@@ -29,10 +30,13 @@ type TicketLookup = {
   ticket_number: number;
   concept: string;
   assigned_priority: TicketPriority;
-  import { BudgetHistoryDropdown } from '@/components/budgets/budget-history-dropdown';
   status: string;
   request_date: string;
 };
+
+function normalizeBudgetStatus(status: BudgetRow['status']) {
+  return status === 'DESEMBOLSADO' ? 'ABONADO' : status;
+}
 
 export default function BudgetsPage() {
   const router = useRouter();
@@ -111,7 +115,10 @@ export default function BudgetsPage() {
       setBudgetTotals(totalsResult.data);
     }
 
-    const budgetRows = (budgetsResult.data ?? []) as BudgetRow[];
+    const budgetRows = ((budgetsResult.data ?? []) as BudgetRow[]).map((budget) => ({
+      ...budget,
+      status: normalizeBudgetStatus(budget.status),
+    }));
     setBudgets(budgetRows);
 
     const ticketIds = budgetRows.map((budget) => budget.ticket_id);

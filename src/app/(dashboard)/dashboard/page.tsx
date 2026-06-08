@@ -2,11 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, CheckCircle2, CircleDollarSign, Layers3, Ticket, TrendingUp, Wallet } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Layers3, Ticket, TrendingUp, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getCurrentUser } from '@/lib/auth/supabase-auth';
 import { supabaseClient } from '@/lib/supabase/client';
-import { fetchBudgetTotals, formatCurrency, type BudgetTotals } from '@/lib/utils/budget-utils';
 import { getTicketPriorityLabel, getTicketPriorityCardStyles, isInCourseStatus, isPendingReviewStatus } from '@/lib/utils/ticket-display';
 import { parseTicketPriority } from '@/lib/utils/priority-utils';
 import { UserRole } from '@/types/roles';
@@ -18,15 +17,6 @@ type DashboardTicketRow = {
   status: string;
   assigned_priority: string;
   request_date: string;
-  budget_assigned_amount: number | null;
-  budget_status: string | null;
-};
-
-type DashboardBudgetRow = {
-  ticket_id: string;
-  assigned_amount: number;
-  disbursed_amount: number | null;
-  status: 'ASIGNADO' | 'ABONADO' | 'COMPROBADO' | 'CANCELADO';
 };
 
 type ScopeFilter = 'all' | 'mine';
@@ -79,13 +69,6 @@ export default function DashboardPage() {
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
   const [scope, setScope] = useState<ScopeFilter>('all');
   const [tickets, setTickets] = useState<DashboardTicketRow[]>([]);
-  const [budgets, setBudgets] = useState<DashboardBudgetRow[]>([]);
-  const [budgetTotals, setBudgetTotals] = useState<BudgetTotals>({
-    totalIncome: 0,
-    totalBudgeted: 0,
-    totalDisbursed: 0,
-    totalAvailable: 0,
-  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statsPeriod, setStatsPeriod] = useState<StatsPeriod>('weekly');
@@ -105,16 +88,10 @@ export default function DashboardPage() {
       setCurrentUserId(currentUser.id);
       setCurrentRole(currentUser.role);
 
-      const [ticketsResult, budgetsResult, budgetTotalsResult] = await Promise.all([
-        supabaseClient
-          .from('tickets')
-          .select('id, user_id, status, assigned_priority, request_date, budget_assigned_amount, budget_status')
-          .order('request_date', { ascending: false }),
-        supabaseClient
-          .from('budgets')
-          .select('ticket_id, assigned_amount, disbursed_amount, status'),
-        fetchBudgetTotals(),
-      ]);
+      const ticketsResult = await supabaseClient
+        .from('tickets')
+        .select('id, user_id, status, assigned_priority, request_date')
+        .order('request_date', { ascending: false });
 
       if (ticketsResult.error) {
         setError(ticketsResult.error.message);
@@ -122,23 +99,7 @@ export default function DashboardPage() {
         return;
       }
 
-      if (budgetsResult.error) {
-        setError(budgetsResult.error.message);
-        setLoading(false);
-        return;
-      }
-
-      if (budgetTotalsResult.error) {
-        setError(budgetTotalsResult.error.message);
-        setLoading(false);
-        return;
-      }
-
       setTickets((ticketsResult.data ?? []) as DashboardTicketRow[]);
-      setBudgets((budgetsResult.data ?? []) as DashboardBudgetRow[]);
-      if (budgetTotalsResult.data) {
-        setBudgetTotals(budgetTotalsResult.data);
-      }
       setLoading(false);
     };
 
@@ -156,14 +117,12 @@ export default function DashboardPage() {
     return tickets;
   }, [tickets, scope, currentUserId]);
 
-  const visibleTicketIds = useMemo(() => new Set(visibleTickets.map((ticket) => ticket.id)), [visibleTickets]);
-
-  const visibleBudgets = useMemo(
-    () => budgets.filter((budget) => visibleTicketIds.has(budget.ticket_id)),
-    [budgets, visibleTicketIds]
-  );
-
   const pendingTickets = useMemo(() => visibleTickets.filter((ticket) => isPendingReviewStatus(ticket.status)), [visibleTickets]);
+  const selectedForComprasTickets = useMemo(
+    () => visibleTickets.filter((ticket) => ticket.status === 'EN_PROCESO'),
+    [visibleTickets]
+  );
+  const acceptedTickets = useMemo(() => visibleTickets.filter((ticket) => ticket.status === 'ACEPTADO'), [visibleTickets]);
   const inCourseTickets = useMemo(() => visibleTickets.filter((ticket) => isInCourseStatus(ticket.status)), [visibleTickets]);
   const completedTickets = useMemo(() => visibleTickets.filter((ticket) => ticket.status === 'COMPLETADO'), [visibleTickets]);
   const deniedTickets = useMemo(() => visibleTickets.filter((ticket) => ticket.status === 'RECHAZADO'), [visibleTickets]);
@@ -176,41 +135,6 @@ export default function DashboardPage() {
       })),
     [inCourseTickets]
   );
-
-  const pendingBudgetsCount = useMemo(
-    () => inCourseTickets.filter((ticket) => ticket.budget_assigned_amount == null).length,
-    [inCourseTickets]
-  );
-
-  const budgetedCount = useMemo(
-    () => inCourseTickets.filter((ticket) => ticket.budget_assigned_amount != null).length,
-    [inCourseTickets]
-  );
-
-  const disbursedCount = useMemo(
-    () => completedTickets.filter((ticket) => ticket.budget_status === 'ABONADO' || ticket.budget_status === 'COMPROBADO' || ticket.budget_assigned_amount != null).length,
-    [completedTickets]
-  );
-
-  const assignedAmount = useMemo(() => {
-    if (scope === 'all') {
-      return budgetTotals.totalBudgeted;
-    }
-
-    return visibleBudgets
-      .filter((budget) => budget.status === 'ASIGNADO')
-      .reduce((sum, budget) => sum + budget.assigned_amount, 0);
-  }, [scope, budgetTotals.totalBudgeted, visibleBudgets]);
-
-  const disbursedAmount = useMemo(() => {
-    if (scope === 'all') {
-      return budgetTotals.totalDisbursed;
-    }
-
-    return visibleBudgets
-      .filter((budget) => budget.status === 'ABONADO' || budget.status === 'COMPROBADO')
-      .reduce((sum, budget) => sum + (budget.disbursed_amount ?? budget.assigned_amount), 0);
-  }, [scope, budgetTotals.totalDisbursed, visibleBudgets]);
 
   const statsWindowStart = useMemo(() => {
     const now = new Date();
@@ -373,20 +297,15 @@ export default function DashboardPage() {
           <section className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-semibold text-[#1f120f]">Presupuestos</h2>
-                <p className="text-sm text-slate-600">Estado presupuestario y lectura financiera resumida del sistema.</p>
+                <h2 className="text-xl font-semibold text-[#1f120f]">Compras</h2>
+                <p className="text-sm text-slate-600">Tickets seleccionados para Compras y su avance hacia aceptación.</p>
               </div>
               <Wallet className="h-6 w-6 text-[#b42318]" />
             </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <SummaryCard title="Pendientes" value={pendingBudgetsCount} description="En curso sin presupuesto cargado." icon={<AlertCircle className="h-6 w-6 text-[#f97316]" />} accent="bg-[#fff4e5]" />
-              <SummaryCard title="Presupuestados" value={budgetedCount} description="En curso con presupuesto asignado." icon={<Layers3 className="h-6 w-6 text-[#b42318]" />} accent="bg-[#fff1e8]" />
-              <SummaryCard title="Abonados" value={disbursedCount} description="Finalizados con abono registrado." icon={<CheckCircle2 className="h-6 w-6 text-[#16a34a]" />} accent="bg-[#ecfdf3]" />
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <SummaryCard title={scope === 'mine' ? 'Disponible institucional' : 'Disponible'} value={formatCurrency(budgetTotals.totalAvailable)} description={scope === 'mine' ? 'Fondo general del sistema aun no asignado.' : 'Monto aun no comprometido en presupuestos.'} icon={<Wallet className="h-6 w-6 text-[#15803d]" />} accent="bg-[#ecfdf3]" />
-              <SummaryCard title="Asignado" value={formatCurrency(assignedAmount)} description={scope === 'mine' ? 'Monto asignado a tickets visibles en tu filtro.' : 'Monto contemplado actualmente en presupuestos.'} icon={<CircleDollarSign className="h-6 w-6 text-[#c2410c]" />} accent="bg-[#fff1e8]" />
-              <SummaryCard title="Abonado" value={formatCurrency(disbursedAmount)} description={scope === 'mine' ? 'Monto abonado en tickets visibles en tu filtro.' : 'Monto efectivamente abonado.'} icon={<CircleDollarSign className="h-6 w-6 text-[#7f1d1d]" />} accent="bg-[#fdecec]" />
+              <SummaryCard title="Seleccionados" value={selectedForComprasTickets.length} description="Tickets marcados para revisión en Compras." icon={<Layers3 className="h-6 w-6 text-[#b42318]" />} accent="bg-[#fff1e8]" />
+              <SummaryCard title="Aceptados" value={acceptedTickets.length} description="Tickets aprobados por Compras." icon={<CheckCircle2 className="h-6 w-6 text-[#16a34a]" />} accent="bg-[#ecfdf3]" />
+              <SummaryCard title="Pendientes" value={pendingTickets.length} description="Tickets pendientes de asignación o selección." icon={<AlertCircle className="h-6 w-6 text-[#f97316]" />} accent="bg-[#fff4e5]" />
             </div>
           </section>
 
@@ -394,7 +313,7 @@ export default function DashboardPage() {
             <Button onClick={() => router.push('/tickets/new')}>Nuevo ticket</Button>
             <Button variant="outline" onClick={() => router.push('/tickets')}>Ir a Tickets</Button>
             <Button variant="outline" onClick={() => router.push('/priorities')}>Ir a Prioridades</Button>
-            <Button variant="outline" onClick={() => router.push('/budgets')}>Ir a Presupuestos</Button>
+            <Button variant="outline" onClick={() => router.push('/compras')}>Ir a Compras</Button>
           </div>
         </>
       )}

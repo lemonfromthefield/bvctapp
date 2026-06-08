@@ -81,6 +81,8 @@ const ACTION_LABELS: Record<string, string> = {
   ACCEPTED: 'Aceptado',
   REJECTED: 'Rechazado',
   PRIORITY_ASSIGNED: 'Prioridad asignada',
+  PRIORITY_CHANGED: 'Prioridad modificada',
+  STATUS_CHANGED: 'Estado modificado',
   BUDGET_ASSIGNED: 'Presupuesto asignado',
   COMPLETED: 'Completado',
   CANCELLED: 'Cancelado',

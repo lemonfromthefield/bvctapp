@@ -81,7 +81,6 @@ export const ROLE_PERMISSIONS: RolePermissionMap = {
     Permission.ASSIGN_PRIORITY,
     Permission.MODIFY_PRIORITY,
     Permission.REORDER_PRIORITIES,
-    Permission.VIEW_BUDGETS,
     Permission.UPLOAD_FILE,
     Permission.DELETE_FILE,
     Permission.VIEW_FILES,
@@ -99,10 +98,6 @@ export const ROLE_PERMISSIONS: RolePermissionMap = {
     Permission.ASSIGN_PRIORITY,
     Permission.MODIFY_PRIORITY,
     Permission.REORDER_PRIORITIES,
-    Permission.LOAD_FUNDS,
-    Permission.ASSIGN_BUDGET,
-    Permission.CHANGE_BUDGET_STATUS,
-    Permission.VIEW_BUDGETS,
     Permission.UPLOAD_FILE,
     Permission.DELETE_FILE,
     Permission.VIEW_FILES,
@@ -164,7 +159,7 @@ export const ROLES_INFO: Record<UserRole, RoleInfo> = {
   [UserRole.COMISION_DIRECTIVA]: {
     role: UserRole.COMISION_DIRECTIVA,
     displayName: 'Comisión Directiva',
-    description: 'Usuario administrativo y financiero que gestiona presupuestos',
+    description: 'Usuario administrativo que selecciona tickets para Compras y valida propuestas',
     color: 'text-red-600',
   },
   [UserRole.ADMIN]: {

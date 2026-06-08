@@ -44,7 +44,7 @@ export function DashboardSidebarNav({ className, onItemClick }: DashboardSidebar
       role === UserRole.COMISION_DIRECTIVA ||
       role === UserRole.ADMIN
     ) {
-      baseItems.push({ href: '/budgets', label: 'Presupuestos', icon: <Wallet className="h-5 w-5" /> });
+      baseItems.push({ href: '/compras', label: 'Compras', icon: <Wallet className="h-5 w-5" /> });
     }
 
     baseItems.push({ href: '/help', label: 'Ayuda', icon: <CircleHelp className="h-5 w-5" /> });

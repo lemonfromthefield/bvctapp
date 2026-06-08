@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/badge';
-import { getBudgetSummaryLabel, getTicketPriorityBadgeVariant, getTicketPriorityLabel, getTicketStatusBadgeVariant, TICKET_STATUS_LABELS } from '@/lib/utils/ticket-display';
+import { getTicketPriorityBadgeVariant, getTicketPriorityLabel, getTicketStatusBadgeVariant, TICKET_STATUS_LABELS } from '@/lib/utils/ticket-display';
 import { parseTicketPriority } from '@/lib/utils/priority-utils';
 
 type TicketIdentityBlockProps = {
@@ -8,8 +8,6 @@ type TicketIdentityBlockProps = {
   status: string;
   assignedPriority: string | null | undefined;
   requestDate?: string | null;
-  budgetStatus?: string | null;
-  budgetAmount?: number | null;
   compact?: boolean;
 };
 
@@ -43,9 +41,6 @@ export function TicketIdentityBlock({
         <Badge variant={status === 'COMPLETADO' || status === 'RECHAZADO' ? 'priorityTerminado' : getTicketPriorityBadgeVariant(normalizedPriority)}>
           {status === 'COMPLETADO' || status === 'RECHAZADO' ? 'Terminado' : getTicketPriorityLabel(assignedPriority)}
         </Badge>
-        <span className="rounded-full border border-[#d7bfb0] bg-white px-3 py-1 font-semibold text-[#7d5a4f]">
-          {getBudgetSummaryLabel(budgetStatus, budgetAmount)}
-        </span>
       </div>
     </div>
   );

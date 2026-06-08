@@ -21,7 +21,7 @@ function getRoleDestination(role?: UserRole) {
     case UserRole.JEFATURA:
       return '/priorities';
     case UserRole.COMISION_DIRECTIVA:
-      return '/budgets';
+      return '/compras';
     case UserRole.ADMIN:
       return '/dashboard';
     default:
@@ -130,7 +130,7 @@ export default function LoginPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-white/16 bg-white/10 p-4 backdrop-blur">
                 <p className="text-xs uppercase tracking-[0.18em] text-[#ffe4d3]">Flujo</p>
-                <p className="mt-2 text-sm text-white/88">Tickets, prioridades, presupuestos y control institucional en un solo lugar.</p>
+                <p className="mt-2 text-sm text-white/88">Tickets, prioridades, compras y control institucional en un solo lugar.</p>
               </div>
               <div className="rounded-2xl border border-white/16 bg-white/10 p-4 backdrop-blur">
                 <p className="text-xs uppercase tracking-[0.18em] text-[#ffe4d3]">Acceso</p>
@@ -242,7 +242,7 @@ export default function LoginPage() {
                 <ul className="mt-2 space-y-1">
                   <li>Representante: Tickets</li>
                   <li>Jefatura: Prioridades</li>
-                  <li>Comisión Directiva: Presupuestos</li>
+                  <li>Comisión Directiva: Compras</li>
                 </ul>
               </div>
             </CardContent>

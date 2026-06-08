@@ -31,9 +31,9 @@ const FAQ_ITEMS: FaqItem[] = [
   },
   {
     id: 'faq-4',
-    question: 'Quienes pueden ver y editar Presupuestos?',
+    question: 'Quienes pueden ver y editar Compras?',
     answer:
-      'Presupuestos es visible para Jefatura y Comision Directiva. Solo Comision Directiva puede editar en ese apartado.',
+      'Compras es visible para Jefatura y Comision Directiva. Solo Comision Directiva puede gestionar tickets seleccionados y aceptar o devolverlos.',
   },
   {
     id: 'faq-5',
