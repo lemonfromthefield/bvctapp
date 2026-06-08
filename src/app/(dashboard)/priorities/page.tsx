@@ -46,6 +46,7 @@ export default function PrioritiesPage() {
 
   const canModifyPriorities =
     currentRole === UserRole.JEFATURA ||
+    currentRole === UserRole.COMISION_DIRECTIVA ||
     currentRole === UserRole.ADMIN;
 
   const canSelectForCompras =
@@ -508,9 +509,9 @@ export default function PrioritiesPage() {
       </div>
 
       <div className="rounded-3xl border border-white/70 bg-[var(--surface)] p-4 text-sm text-slate-700 shadow-[0_18px_40px_rgba(76,29,20,0.12)] backdrop-blur-xl">
-        {canModifyPriorities
-          ? 'Jefatura/Admin pueden cambiar prioridades. Comisión usa esta vista para seleccionar tickets para Compras.'
-          : 'Vista orientada a selección y seguimiento para tu rol.'}
+          {canModifyPriorities
+            ? 'Jefatura/Comisión/Admin pueden cambiar prioridades. Comisión puede además seleccionar o revisar tickets.'
+            : 'Vista orientada a selección y seguimiento para tu rol.'}
       </div>
 
       {error ? (
