@@ -32,6 +32,7 @@ export default function PrioritiesPage() {
   const [tickets, setTickets] = useState<PriorityTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [selectingId, setSelectingId] = useState<string | null>(null);
   const [selectedPriorityById, setSelectedPriorityById] = useState<Record<string, TicketPriority>>({});
   const [pendingSectionOpen, setPendingSectionOpen] = useState(true);
   const [determinedSectionOpen, setDeterminedSectionOpen] = useState(false);
@@ -40,6 +41,10 @@ export default function PrioritiesPage() {
 
   const canModifyPriorities =
     currentRole === UserRole.JEFATURA ||
+    currentRole === UserRole.ADMIN;
+
+  const canSelectForCompras =
+    currentRole === UserRole.COMISION_DIRECTIVA ||
     currentRole === UserRole.ADMIN;
 
 
@@ -144,6 +149,38 @@ export default function PrioritiesPage() {
     setUpdatingId(null);
   };
 
+  const selectForCompras = async (ticketId: string) => {
+    if (!canSelectForCompras) return;
+    setSelectingId(ticketId);
+    setError(null);
+
+    const { error } = await supabaseClient.from('tickets').update({ status: 'EN_PROCESO' }).eq('id', ticketId);
+    if (error) {
+      setError(error.message);
+      setSelectingId(null);
+      return;
+    }
+
+    await loadData();
+    setSelectingId(null);
+  };
+
+  const unselectForCompras = async (ticketId: string) => {
+    if (!canSelectForCompras) return;
+    setSelectingId(ticketId);
+    setError(null);
+
+    const { error } = await supabaseClient.from('tickets').update({ status: 'ACEPTADO' }).eq('id', ticketId);
+    if (error) {
+      setError(error.message);
+      setSelectingId(null);
+      return;
+    }
+
+    await loadData();
+    setSelectingId(null);
+  };
+
 
   return (
     <div className="space-y-6">
@@ -227,6 +264,20 @@ export default function PrioritiesPage() {
                   <div className="space-y-2 rounded-2xl border border-[#ead8cf] bg-white px-3 py-3 text-sm text-slate-700">
                     <p className="font-semibold text-[#1f120f]">Compras</p>
                     <p className="text-xs text-slate-500">Este módulo gestiona prioridades y seguimiento de compras, sin asignación presupuestaria directa.</p>
+
+                    {canSelectForCompras ? (
+                      ticket.status !== 'EN_PROCESO' ? (
+                        <Button className="w-full" disabled={selectingId === ticket.id} onClick={() => selectForCompras(ticket.id)}>
+                          {selectingId === ticket.id ? 'Seleccionando...' : 'Seleccionar para Compras'}
+                        </Button>
+                      ) : (
+                        <Button variant="destructive" className="w-full" disabled={selectingId === ticket.id} onClick={() => unselectForCompras(ticket.id)}>
+                          {selectingId === ticket.id ? 'Quitando...' : 'Quitar de Compras'}
+                        </Button>
+                      )
+                    ) : (
+                      <p className="text-xs text-slate-500">Visible solo para Comisión Directiva y Admin.</p>
+                    )}
                   </div>
                 </div>
               </details>
