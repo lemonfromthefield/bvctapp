@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type DragEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TicketIdentityBlock } from '@/components/tickets/ticket-identity-block';
@@ -25,7 +25,7 @@ type PriorityTicket = {
 
 const PRIORITY_ORDER = Object.values(TicketPriority).sort((left, right) => PRIORITY_RULES[right].precedence - PRIORITY_RULES[left].precedence);
 
-const ACTIVE_STATUSES = ['PENDIENTE', 'ACEPTADO', 'PRESUPUESTADO', 'EN_PROCESO', 'COMPLETADO'] as const;
+const ACTIVE_STATUSES = ['BORRADOR', 'PENDIENTE', 'ACEPTADO', 'PRESUPUESTADO', 'EN_PROCESO', 'COMPLETADO'] as const;
 
 export default function PrioritiesPage() {
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
@@ -35,6 +35,8 @@ export default function PrioritiesPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [selectingId, setSelectingId] = useState<string | null>(null);
   const [reorderingId, setReorderingId] = useState<string | null>(null);
+  const [draggingTicketId, setDraggingTicketId] = useState<string | null>(null);
+  const [dragOverTicketId, setDragOverTicketId] = useState<string | null>(null);
   const [selectedPriorityById, setSelectedPriorityById] = useState<Record<string, TicketPriority>>({});
   const [pendingSectionOpen, setPendingSectionOpen] = useState(true);
   const [determinedSectionOpen, setDeterminedSectionOpen] = useState(false);
@@ -134,12 +136,101 @@ export default function PrioritiesPage() {
 
   const selectedTickets = useMemo(() => orderedTickets.filter((ticket) => ticket.status === 'EN_PROCESO'), [orderedTickets]);
 
+  const selectedTicketGroups = useMemo(() => {
+    return PRIORITY_ORDER.map((priority) => ({
+      priority,
+      tickets: selectedTickets.filter((ticket) => ticket.assigned_priority === priority),
+    })).filter((group) => group.tickets.length > 0);
+  }, [selectedTickets]);
+
   const pendingResolutionTickets = useMemo(
     () => orderedTickets.filter((ticket) => ticket.status !== 'COMPLETADO' && ticket.status !== 'EN_PROCESO'),
     [orderedTickets]
   );
 
   const determinedTickets = useMemo(() => orderedTickets.filter((ticket) => ticket.status === 'COMPLETADO'), [orderedTickets]);
+
+  const moveTicketWithinPriority = async (
+    priority: TicketPriority,
+    draggedTicketId: string,
+    targetTicketId: string
+  ) => {
+    if (!canReorderPriorities) return;
+
+    setReorderingId(draggedTicketId);
+    setError(null);
+
+    const samePriorityTickets = selectedTickets.filter(
+      (ticket) => ticket.assigned_priority === priority
+    );
+
+    const draggedIndex = samePriorityTickets.findIndex((ticket) => ticket.id === draggedTicketId);
+    const targetIndex = samePriorityTickets.findIndex((ticket) => ticket.id === targetTicketId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setError('No se pudo reordenar el ticket dentro de su prioridad.');
+      setReorderingId(null);
+      return;
+    }
+
+    const reordered = [...samePriorityTickets];
+    const [movedTicket] = reordered.splice(draggedIndex, 1);
+    reordered.splice(targetIndex, 0, movedTicket);
+
+    const results = await Promise.all(
+      reordered.map((ticket, index) =>
+        supabaseClient
+          .from('tickets')
+          .update({ order_number: index + 1 })
+          .eq('id', ticket.id)
+          .select()
+      )
+    );
+
+    const failed = results.find((response) => response.error);
+    if (failed?.error) {
+      setError(failed.error.message);
+      setReorderingId(null);
+      return;
+    }
+
+    await loadData();
+    setReorderingId(null);
+  };
+
+  const handleDragStart = (event: DragEvent<HTMLDivElement>, ticketId: string) => {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', ticketId);
+    setDraggingTicketId(ticketId);
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>, ticketId: string) => {
+    event.preventDefault();
+    setDragOverTicketId(ticketId);
+  };
+
+  const handleDrop = async (
+    event: DragEvent<HTMLDivElement>,
+    targetId: string,
+    priority: TicketPriority
+  ) => {
+    event.preventDefault();
+    const draggedId = event.dataTransfer.getData('text/plain');
+    setDragOverTicketId(null);
+
+    if (!draggedId || draggedId === targetId) {
+      setDraggingTicketId(null);
+      return;
+    }
+
+    await moveTicketWithinPriority(priority, draggedId, targetId);
+    setDraggingTicketId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingTicketId(null);
+    setDragOverTicketId(null);
+  };
 
   const updateTicketPriority = async (ticket: PriorityTicket) => {
     if (!canModifyPriorities || !currentUserId) {
@@ -413,40 +504,63 @@ export default function PrioritiesPage() {
         {loading ? (
           <p className="text-sm text-slate-600">Cargando seleccionados...</p>
         ) : (
-          <div className="space-y-2">
-            {selectedTickets.map((ticket) => (
-              <div key={ticket.id} className="rounded-2xl border border-[#ead8cf] bg-[#fff9f5] p-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <TicketIdentityBlock
-                    compact
-                    ticketNumber={ticket.ticket_number}
-                    concept={ticket.concept}
-                    status={ticket.status}
-                    assignedPriority={ticket.assigned_priority}
-                    orderNumber={ticket.order_number}
-                    requestDate={ticket.request_date}
-                  />
-                  <div className="flex items-center gap-2">
-                    <Link href={`/tickets/${ticket.id}`} className="text-xs font-semibold text-[#9a3d12] underline-offset-2 hover:underline">Ver ticket</Link>
-                    {canReorderPriorities ? (
-                      <div className="grid gap-2">
-                        <Button
-                          variant="outline"
-                          disabled={reorderingId === ticket.id}
-                          onClick={() => moveTicketOrder(ticket.id, 'up')}
-                        >
-                          {reorderingId === ticket.id ? 'Moviendo...' : 'Subir'}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          disabled={reorderingId === ticket.id}
-                          onClick={() => moveTicketOrder(ticket.id, 'down')}
-                        >
-                          {reorderingId === ticket.id ? 'Moviendo...' : 'Bajar'}
-                        </Button>
-                      </div>
-                    ) : null}
+          <div className="space-y-4">
+            {selectedTicketGroups.map(({ priority, tickets }) => (
+              <div key={priority} className="rounded-2xl border border-[#ead8cf] bg-[#fff9f5] p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[#1f120f]">{PRIORITY_RULES[priority].displayName}</p>
+                    <p className="text-xs text-slate-500">Arrastrá los tickets para ajustar el orden dentro de esta prioridad.</p>
                   </div>
+                  <Badge variant={getTicketPriorityBadgeVariant(priority)}>{tickets.length}</Badge>
+                </div>
+                <div className="space-y-2">
+                  {tickets.map((ticket) => (
+                    <div
+                      key={ticket.id}
+                      draggable={canReorderPriorities}
+                      onDragStart={(event) => handleDragStart(event, ticket.id)}
+                      onDragOver={(event) => handleDragOver(event, ticket.id)}
+                      onDrop={(event) => handleDrop(event, ticket.id, priority)}
+                      onDragEnd={handleDragEnd}
+                      className={`rounded-2xl border border-[#ead8cf] bg-white px-3 py-3 transition ${
+                        dragOverTicketId === ticket.id ? 'ring-2 ring-slate-300 bg-slate-50' : ''
+                      } ${draggingTicketId === ticket.id ? 'opacity-70' : 'opacity-100'}`}
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <TicketIdentityBlock
+                          compact
+                          ticketNumber={ticket.ticket_number}
+                          concept={ticket.concept}
+                          status={ticket.status}
+                          assignedPriority={ticket.assigned_priority}
+                          orderNumber={ticket.order_number}
+                          requestDate={ticket.request_date}
+                        />
+                        <div className="flex items-center gap-2">
+                          <Link href={`/tickets/${ticket.id}`} className="text-xs font-semibold text-[#9a3d12] underline-offset-2 hover:underline">Ver ticket</Link>
+                          {canReorderPriorities ? (
+                            <div className="grid gap-2">
+                              <Button
+                                variant="outline"
+                                disabled={reorderingId === ticket.id}
+                                onClick={() => moveTicketOrder(ticket.id, 'up')}
+                              >
+                                {reorderingId === ticket.id ? 'Moviendo...' : 'Subir'}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                disabled={reorderingId === ticket.id}
+                                onClick={() => moveTicketOrder(ticket.id, 'down')}
+                              >
+                                {reorderingId === ticket.id ? 'Moviendo...' : 'Bajar'}
+                              </Button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}

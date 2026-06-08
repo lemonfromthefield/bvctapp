@@ -1277,7 +1277,7 @@ CREATE POLICY "tickets_update_owner_draft" ON tickets FOR UPDATE
   USING (
     (user_id = auth.uid() AND status IN ('BORRADOR', 'PENDIENTE')) OR
     (get_my_role() IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN')
-      AND status NOT IN ('ACEPTADO', 'RECHAZADO', 'COMPLETADO', 'CANCELADO'))
+      AND status NOT IN ('RECHAZADO', 'COMPLETADO', 'CANCELADO'))
   )
   WITH CHECK (
     (user_id = auth.uid() AND status IN ('BORRADOR', 'PENDIENTE')) OR
