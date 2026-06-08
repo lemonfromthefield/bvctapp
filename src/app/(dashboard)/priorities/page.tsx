@@ -143,11 +143,11 @@ export default function PrioritiesPage() {
     })).filter((group) => group.tickets.length > 0);
   }, [selectedTickets]);
 
-  const reorderSelectedPriorityGroup = async (priority: TicketPriority) => {
+  const reorderPriorityGroup = async (priority: TicketPriority) => {
     const query = await supabaseClient
       .from('tickets')
       .select('id, order_number, request_date')
-      .eq('status', 'EN_PROCESO')
+      .in('status', [...ACTIVE_STATUSES])
       .eq('assigned_priority', priority)
       .order('order_number', { ascending: true })
       .order('request_date', { ascending: true });
@@ -196,7 +196,7 @@ export default function PrioritiesPage() {
     setReorderingId(draggedTicketId);
     setError(null);
 
-    const samePriorityTickets = selectedTickets.filter(
+    const samePriorityTickets = orderedTickets.filter(
       (ticket) => ticket.assigned_priority === priority
     );
 
@@ -234,19 +234,19 @@ export default function PrioritiesPage() {
     setReorderingId(null);
   };
 
-  const handleDragStart = (event: DragEvent<HTMLDivElement>, ticketId: string) => {
+  const handleDragStart = (event: DragEvent<HTMLElement>, ticketId: string) => {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', ticketId);
     setDraggingTicketId(ticketId);
   };
 
-  const handleDragOver = (event: DragEvent<HTMLDivElement>, ticketId: string) => {
+  const handleDragOver = (event: DragEvent<HTMLElement>, ticketId: string) => {
     event.preventDefault();
     setDragOverTicketId(ticketId);
   };
 
   const handleDrop = async (
-    event: DragEvent<HTMLDivElement>,
+    event: DragEvent<HTMLElement>,
     targetId: string,
     priority: TicketPriority
   ) => {
@@ -301,23 +301,31 @@ export default function PrioritiesPage() {
     const ticket = tickets.find((item) => item.id === ticketId);
     const ticketPriority = ticket?.assigned_priority ?? TicketPriority.SIN_PRIORIDAD;
 
-    const countResult = await supabaseClient
-      .from('tickets')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'EN_PROCESO')
-      .eq('assigned_priority', ticketPriority);
+    const basePayload: Record<string, unknown> = { status: 'EN_PROCESO' };
+    let updatePayload = basePayload;
 
-    if (countResult.error) {
-      setError(countResult.error.message);
-      setSelectingId(null);
-      return;
+    if (!ticket?.order_number || ticket.order_number <= 0) {
+      const maxOrderResult = await supabaseClient
+        .from('tickets')
+        .select('order_number')
+        .eq('assigned_priority', ticketPriority)
+        .in('status', [...ACTIVE_STATUSES])
+        .order('order_number', { ascending: false })
+        .limit(1);
+
+      if (maxOrderResult.error) {
+        setError(maxOrderResult.error.message);
+        setSelectingId(null);
+        return;
+      }
+
+      const lastOrder = (maxOrderResult.data?.[0] as { order_number?: number } | undefined)?.order_number ?? 0;
+      updatePayload = { ...basePayload, order_number: lastOrder + 1 };
     }
-
-    const existingPriorityCount = countResult.count ?? 0;
 
     const { data, error } = await supabaseClient
       .from('tickets')
-      .update({ status: 'EN_PROCESO', order_number: existingPriorityCount + 1 })
+      .update(updatePayload)
       .eq('id', ticketId)
       .select();
 
@@ -364,7 +372,7 @@ export default function PrioritiesPage() {
     }
 
     await loadData();
-    await reorderSelectedPriorityGroup(ticketPriority);
+    await reorderPriorityGroup(ticketPriority);
     await loadData();
     setSelectingId(null);
   };
@@ -456,7 +464,15 @@ export default function PrioritiesPage() {
         ) : (
           <div className="space-y-3">
             {pendingResolutionTickets.map((ticket) => (
-              <details key={ticket.id} className="group rounded-2xl border border-[#ead8cf] bg-[#fff9f5] p-4">
+              <details
+                key={ticket.id}
+                draggable={canReorderPriorities}
+                onDragStart={(event) => handleDragStart(event, ticket.id)}
+                onDragOver={(event) => handleDragOver(event, ticket.id)}
+                onDrop={(event) => handleDrop(event, ticket.id, ticket.assigned_priority)}
+                onDragEnd={handleDragEnd}
+                className="group rounded-2xl border border-[#ead8cf] bg-[#fff9f5] p-4"
+              >
                 <summary className="cursor-pointer list-none">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <TicketIdentityBlock
