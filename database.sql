@@ -726,8 +726,8 @@ BEGIN
     RAISE EXCEPTION 'Debes iniciar sesión para asignar prioridades';
   END IF;
 
-  IF public.get_my_role() NOT IN ('JEFATURA', 'ADMIN') THEN
-    RAISE EXCEPTION 'Solo Jefatura o Admin pueden asignar prioridades';
+  IF public.get_my_role() NOT IN ('JEFATURA', 'COMISION_DIRECTIVA', 'ADMIN') THEN
+    RAISE EXCEPTION 'Solo Jefatura, Comisión Directiva o Admin pueden asignar prioridades';
   END IF;
 
   normalized_priority := UPPER(REPLACE(BTRIM(COALESCE(p_priority, '')), ' ', '_'));

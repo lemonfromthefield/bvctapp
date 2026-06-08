@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabaseClient } from '@/lib/supabase/client';
 import { PRIORITY_RULES, TicketPriority } from '@/types/tickets';
+import { parseTicketPriority } from '@/lib/utils/priority-utils';
 import type { UserRole } from '@/types/roles';
 import { ROLES_INFO } from '@/types/roles';
 
@@ -325,8 +326,14 @@ export default function TicketDetailPage() {
     );
   }
 
-  const priorityRule = PRIORITY_RULES[ticket.assigned_priority as TicketPriority] ?? PRIORITY_RULES[TicketPriority.SIN_PRIORIDAD];
+  const assignedPriority = parseTicketPriority(ticket.assigned_priority);
+  const priorityRule = PRIORITY_RULES[assignedPriority] ?? PRIORITY_RULES[TicketPriority.SIN_PRIORIDAD];
   const creatorRole = ticket.profiles?.role as UserRole | undefined;
+
+  // Compute time remaining using priority rule. Use priority_assigned_date if present, else request_date
+  const referenceDate = ticket.priority_assigned_date ? new Date(ticket.priority_assigned_date) : new Date(ticket.request_date);
+  const ageDays = Math.floor((Date.now() - referenceDate.getTime()) / (1000 * 60 * 60 * 24));
+  const remainingDays = Math.max(0, priorityRule.expectedCoverageInDays - ageDays);
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
@@ -429,6 +436,11 @@ export default function TicketDetailPage() {
             />
             <DataRow label="Prioridad sugerida" value={PRIORITY_RULES[ticket.suggested_priority as TicketPriority]?.displayName ?? ticket.suggested_priority} />
             <DataRow label="Prioridad asignada" value={priorityRule.displayName} />
+            <DataRow label="Tiempo restante" value={
+              remainingDays === 0 && ageDays > priorityRule.expectedCoverageInDays
+                ? `Vencido por ${ageDays - priorityRule.expectedCoverageInDays} días`
+                : `${remainingDays} días restantes`
+            } />
             {ticket.observations ? (
               <div className="sm:col-span-2">
                 <dt className="text-xs font-medium text-slate-500">Observaciones</dt>
